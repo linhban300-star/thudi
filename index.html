@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bảng vẽ từ xa - Mở file & Kết nối</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- PDF.js để hiển thị PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .app-container {
+            max-width: 1300px;
+            width: 100%;
+            background: #1a1a2e;
+            border-radius: 28px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+            border: 1px solid #2a2a4a;
+        }
+        h1 {
+            font-weight: 400;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        h1 i { color: #f0a500; }
+        .top-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: space-between;
+            background: #12122a;
+            padding: 14px 20px;
+            border-radius: 40px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f0a500;
+        }
+        .conn-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.95rem;
+        }
+        .dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ff4757;
+            transition: 0.3s;
+            display: inline-block;
+        }
+        .dot.on { background: #2ed573; box-shadow: 0 0 16px #2ed573aa; }
+        .btn {
+            background: #25254a;
+            border: 1px solid #3a3a6a;
+            color: #ddd;
+            padding: 8px 18px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        .btn:hover { background: #35356a; border-color: #f0a500; color: #fff; }
+        .btn-primary { background: #f0a500; color: #0f0f1f; border-color: #f0a500; }
+        .btn-primary:hover { background: #ffb820; }
+        .btn-danger { background: #c0392b; border-color: #c0392b; }
+        .btn-danger:hover { background: #e74c3c; }
+
+        .file-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            background: #12122a;
+            padding: 14px 18px;
+            border-radius: 30px;
+            margin-bottom: 16px;
+            align-items: center;
+        }
+        .file-section label {
+            background: #1e1e42;
+            padding: 6px 16px;
+            border-radius: 30px;
+            border: 1px solid #3a3a6a;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .file-section label:hover { background: #2e2e5a; border-color: #f0a500; }
+        input[type="file"] { display: none; }
+
+        .canvas-wrap {
+            position: relative;
+            background: #0a0a1a;
+            border-radius: 20px;
+            border: 2px solid #2a2a4a;
+            overflow: hidden;
+            touch-action: none;
+            margin: 12px 0;
+        }
+        #drawCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 10;
+            background: white;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        .tools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 20px;
+            padding: 12px 0 4px;
+        }
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #12122a;
+            padding: 4px 16px;
+            border-radius: 40px;
+            border: 1px solid #2a2a5a;
+        }
+        .tool-group label { font-size: 0.85rem; opacity: 0.7; }
+        input[type="range"] { width: 90px; accent-color: #f0a500; }
+        input[type="color"] { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #3a3a6a; padding: 2px; background: transparent; cursor: pointer; }
+
+        .file-preview {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #0e0e24;
+            padding: 10px 18px;
+            border-radius: 30px;
+            border-left: 4px solid #f0a500;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .file-preview i { font-size: 1.2rem; color: #f0a500; }
+
+        .guide-box {
+            background: #0e0e24;
+            border-radius: 20px;
+            padding: 16px 20px;
+            margin-top: 18px;
+            border: 1px solid #2a2a5a;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+        }
+        .guide-box h4 { color: #f0a500; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+        .guide-box ul { list-style: none; font-size: 0.9rem; line-height: 1.8; }
+        .guide-box ul li::before { content: "▸ "; color: #f0a500; }
+        .guide-box .step { background: #1a1a3a; padding: 6px 14px; border-radius: 30px; display: inline-block; margin-right: 6px; }
+        @media (max-width: 700px) {
+            .app-container { padding: 14px; }
+            .top-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+            .tools { flex-direction: column; align-items: stretch; }
+            .tool-group { justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <h1><i class="fas fa-paint-brush"></i> Bảng vẽ từ xa <span style="font-size:0.9rem; opacity:0.6; margin-left:auto;"><i class="fas fa-phone-alt"></i> + <i class="fas fa-desktop"></i></span></h1>
+
+    <!-- Thanh trạng thái + kết nối -->
+    <div class="top-bar">
+        <div class="conn-status">
+            <span class="dot" id="statusDot"></span>
+            <span id="statusText">Đang kết nối...</span>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-primary" id="connectBtn"><i class="fas fa-link"></i> Kết nối</button>
+            <button class="btn btn-danger" id="disconnectBtn"><i class="fas fa-unlink"></i> Ngắt</button>
+        </div>
+    </div>
+
+    <!-- Khu vực tải file -->
+    <div class="file-section">
+        <label for="imageInput"><i class="fas fa-image"></i> Ảnh</label>
+        <input type="file" id="imageInput" accept="image/*">
+        <label for="pdfInput"><i class="fas fa-file-pdf"></i> PDF</label>
+        <input type="file" id="pdfInput" accept=".pdf">
+        <label for="wordInput"><i class="fas fa-file-word"></i> Word</label>
+        <input type="file" id="wordInput" accept=".doc,.docx">
+        <button class="btn" id="clearFileBtn"><i class="fas fa-times"></i> Xóa file</button>
+        <span style="margin-left:auto; font-size:0.8rem; opacity:0.5;"><i class="fas fa-info-circle"></i> Kéo thả hoặc chọn</span>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrap">
+        <canvas id="drawCanvas" width="800" height="500"></canvas>
+    </div>
+
+    <!-- Công cụ vẽ -->
+    <div class="tools">
+        <div class="tool-group">
+            <label><i class="fas fa-pen"></i> Nét</label>
+            <input type="range" id="lineWidth" min="2" max="30" value="6">
+            <span id="sizeDisplay" style="min-width:28px;">6</span>
+        </div>
+        <div class="tool-group">
+            <label><i class="fas fa-palette"></i></label>
+            <input type="color" id="colorPicker" value="#e74c3c">
+        </div>
+        <button class="btn" id="undoBtn"><i class="fas fa-undo-alt"></i> Hoàn tác</button>
+        <button class="btn btn-danger" id="clearCanvasBtn"><i class="fas fa-eraser"></i> Xóa vẽ</button>
+    </div>
+
+    <!-- Thông tin file đang mở -->
+    <div class="file-preview" id="filePreview">
+        <i class="fas fa-file" id="fileIcon"></i>
+        <span id="fileName">Chưa mở file</span>
+        <span style="margin-left:auto; opacity:0.6; font-size:0.8rem;" id="fileInfo">—</span>
+    </div>
+
+    <!-- HƯỚNG DẪN KẾT NỐI CHI TIẾT -->
+    <div class="guide-box">
+        <div style="flex:1;">
+            <h4><i class="fas fa-plug"></i> Hướng dẫn kết nối (mô phỏng WebSocket)</h4>
+            <ul>
+                <li><span class="step">1</span> Mở trang này trên cả <strong>Máy tính</strong> và <strong>Điện thoại</strong>.</li>
+                <li><span class="step">2</span> Trên máy tính, nhấn <strong>"Kết nối"</strong> → trạng thái chuyển xanh.</li>
+                <li><span class="step">3</span> Trên điện thoại, nhấn <strong>"Kết nối"</strong> → đồng bộ tự động.</li>
+                <li><span class="step">4</span> Vẽ trên thiết bị nào cũng được, nội dung hiển thị trên cả hai.</li>
+                <li><span class="step">5</span> Tải file (Ảnh, PDF, Word) để vẽ lên nội dung file.</li>
+            </ul>
+        </div>
+        <div style="flex:1; border-left:1px solid #2a2a5a; padding-left:20px;">
+            <h4><i class="fas fa-lightbulb"></i> Mẹo & tính năng</h4>
+            <ul>
+                <li><i class="fas fa-check-circle" style="color:#2ed573;"></i> Vẽ trực tiếp lên ảnh, PDF (xem trước), Word.</li>
+                <li><i class="fas fa-sync-alt" style="color:#f0a500;"></i> Đồng bộ theo thời gian thực (mô phỏng).</li>
+                <li><i class="fas fa-mobile-alt" style="color:#3498db;"></i> Cảm ứng trên điện thoại hoạt động mượt.</li>
+                <li><i class="fas fa-undo" style="color:#f39c12;"></i> Hoàn tác 10 bước gần nhất.</li>
+                <li><i class="fas fa-file-pdf"></i> PDF được render thành ảnh nền (trang đầu).</li>
+            </ul>
+        </div>
+    </div>
+    <div style="text-align:center; margin-top:14px; font-size:0.8rem; opacity:0.4;">
+        <i class="fas fa-share-alt"></i> Mở trên cả hai thiết bị cùng mạng WiFi · IP máy tính: <span id="localIp">192.168.1.x</span> (tự động)
+    </div>
+</div>
+
+<script>
+    (function() {
+        // ---------- DOM refs ----------
+        const canvas = document.getElementById('drawCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const lineWidthInput = document.getElementById('lineWidth');
+        const sizeDisplay = document.getElementById('sizeDisplay');
+        const colorPicker = document.getElementById('colorPicker');
+        const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const clearFileBtn = document.getElementById('clearFileBtn');
+        const fileIcon = document.getElementById('fileIcon');
+        const fileName = document.getElementById('fileName');
+        const fileInfo = document.getElementById('fileInfo');
+
+        const imageInput = document.getElementById('imageInput');
+        const pdfInput = document.getElementById('pdfInput');
+        const wordInput = document.getElementById('wordInput');
+
+        // ---------- State ----------
+        let isConnected = false;
+        let drawing = false;
+        let lastX = 0, lastY = 0;
+        let currentColor = '#e74c3c';
+        let currentWidth = 6;
+        let paths = [];
+        let currentPath = null;
+        let undoStack = [];
+
+        // File background
+        let bgImage = null;        // Image object
+        let bgDataURL = null;
+        let bgType = '';
+
+        // PDF.js worker
+        const pdfjsLib = window.pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // ---------- Canvas resize ----------
+        function resizeCanvas() {
+            // giữ nguyên tỷ lệ 16/10
+            canvas.width = 800;
+            canvas.height = 500;
+            redrawAll();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // ---------- Vẽ lại toàn bộ ----------
+        function redrawAll() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Vẽ ảnh nền nếu có
+            if (bgImage) {
+                ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+            }
+            // Vẽ các path
+            for (let path of paths) {
+                if (path.points.length < 1) continue;
+                ctx.beginPath();
+                ctx.strokeStyle = path.color;
+                ctx.lineWidth = path.width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                if (path.points.length === 1) {
+                    ctx.arc(path.points[0].x, path.points[0].y, path.width/2, 0, Math.PI*2);
+                    ctx.fillStyle = path.color;
+                    ctx.fill();
+                } else {
+                    ctx.moveTo(path.points[0].x, path.points[0].y);
+                    for (let i = 1; i < path.points.length; i++) {
+                        ctx.lineTo(path.points[i].x, path.points[i].y);
+                    }
+                    ctx.stroke();
+                }
+            }
+            // Vẽ path hiện tại
+            if (currentPath && currentPath.points.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = currentPath.color;
+                ctx.lineWidth = currentPath.width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                if (currentPath.points.length === 1) {
+                    ctx.arc(currentPath.points[0].x, currentPath.points[0].y, currentPath.width/2, 0, Math.PI*2);
+                    ctx.fillStyle = currentPath.color;
+                    ctx.fill();
+                } else {
+                    ctx.moveTo(currentPath.points[0].x, currentPath.points[0].y);
+                    for (let i = 1; i < currentPath.points.length; i++) {
+                        ctx.lineTo(currentPath.points[i].x, currentPath.points[i].y);
+                    }
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // ---------- Xử lý file ----------
+        function loadImageFromDataURL(dataURL, name, type) {
+            const img = new Image();
+            img.onload = function() {
+                bgImage = img;
+                bgDataURL = dataURL;
+                bgType = type;
+                fileName.textContent = name;
+                fileIcon.className = 'fas ' + (type === 'image' ? 'fa-image' : type === 'pdf' ? 'fa-file-pdf' : 'fa-file-word');
+                fileInfo.textContent = type.toUpperCase();
+                redrawAll();
+            };
+            img.onerror = function() {
+                alert('Không thể tải file này.');
+            };
+            img.src = dataURL;
+        }
+
+        // Hàm render PDF trang đầu thành ảnh
+        function renderPDFToImage(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                pdfjsLib.getDocument({ data }).promise.then(function(pdf) {
+                    pdf.getPage(1).then(function(page) {
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = viewport.width;
+                        tempCanvas.height = viewport.height;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        const renderContext = {
+                            canvasContext: tempCtx,
+                            viewport: viewport
+                        };
+                        page.render(renderContext).promise.then(function() {
+                            const dataURL = tempCanvas.toDataURL('image/png');
+                            loadImageFromDataURL(dataURL, file.name, 'pdf');
+                        });
+                    });
+                }).catch(function(err) {
+                    alert('Không thể đọc PDF: ' + err.message);
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Word → tạo ảnh mô phỏng
+        function handleWordFile(file) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 800;
+            tempCanvas.height = 500;
+            const tctx = tempCanvas.getContext('2d');
+            tctx.fillStyle = '#f5f5f0';
+            tctx.fillRect(0, 0, 800, 500);
+            tctx.fillStyle = '#1a2a4a';
+            tctx.font = 'bold 40px sans-serif';
+            tctx.textAlign = 'center';
+            tctx.textBaseline = 'middle';
+            tctx.fillText('📄 Word Document', 400, 180);
+            tctx.font = '24px sans-serif';
+            tctx.fillStyle = '#333';
+            tctx.fillText(file.name, 400, 260);
+            tctx.fillStyle = '#666';
+            tctx.font = '18px sans-serif';
+            tctx.fillText('(Mô phỏng nội dung Word)', 400, 340);
+            const dataURL = tempCanvas.toDataURL('image/png');
+            loadImageFromDataURL(dataURL, file.name, 'word');
+        }
+
+        function handleFileInput(file, type) {
+            if (!file) return;
+            if (type === 'image') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    loadImageFromDataURL(e.target.result, file.name, 'image');
+                };
+                reader.readAsDataURL(file);
+            } else if (type === 'pdf') {
+                renderPDFToImage(file);
+            } else if (type === 'word') {
+                handleWordFile(file);
+            }
+        }
+
+        // Sự kiện input
+        imageInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) handleFileInput(this.files[0], 'image');
+            this.value = '';
+        });
+        pdfInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) handleFileInput(this.files[0], 'pdf');
+            this.value = '';
+        });
+        wordInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) handleFileInput(this.files[0], 'word');
+            this.value = '';
+        });
+
+        clearFileBtn.addEventListener('click', function() {
+            bgImage = null;
+            bgDataURL = null;
+            bgType = '';
+            fileName.textContent = 'Chưa mở file';
+            fileIcon.className = 'fas fa-file';
+            fileInfo.textContent = '—';
+            redrawAll();
+        });
+
+        // ---------- Vẽ (touch & mouse) ----------
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let cx, cy;
+            if (e.touches) {
+                cx = e.touches[0].clientX;
+                cy = e.touches[0].clientY;
+                e.preventDefault();
+            } else {
+                cx = e.clientX;
+                cy = e.clientY;
+            }
+            return {
+                x: Math.min(Math.max((cx - rect.left) * scaleX, 0), canvas.width),
+                y: Math.min(Math.max((cy - rect.top) * scaleY, 0), canvas.height)
+            };
+        }
+
+        function startDraw(e) {
+            if (!isConnected) { statusText.textContent = '⚠️ Chưa kết nối!'; return; }
+            e.preventDefault();
+            const pos = getCoords(e);
+            drawing = true;
+            currentPath = { color: currentColor, width: currentWidth, points: [{ x: pos.x, y: pos.y }] };
+            redrawAll();
+        }
+
+        function moveDraw(e) {
+            if (!drawing || !currentPath || !isConnected) return;
+            e.preventDefault();
+            const pos = getCoords(e);
+            currentPath.points.push({ x: pos.x, y: pos.y });
+            redrawAll();
+        }
+
+        function endDraw(e) {
+            if (drawing && currentPath && isConnected) {
+                if (currentPath.points.length > 0) {
+                    paths.push({ ...currentPath, points: [...currentPath.points] });
+                    undoStack.push({ type: 'path', path: { ...currentPath, points: [...currentPath.points] } });
+                }
+                currentPath = null;
+                drawing = false;
+                redrawAll();
+            } else {
+                drawing = false;
+                currentPath = null;
+            }
+        }
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', moveDraw);
+        canvas.addEventListener('mouseup', endDraw);
+        canvas.addEventListener('mouseleave', endDraw);
+
+        canvas.addEventListener('touchstart', startDraw, { passive: false });
+        canvas.addEventListener('touchmove', moveDraw, { passive: false });
+        canvas.addEventListener('touchend', endDraw, { passive: false });
+        canvas.addEventListener('touchcancel', endDraw, { passive: false });
+
+        // ---------- Undo ----------
+        undoBtn.addEventListener('click', function() {
+            if (paths.length === 0) return;
+            paths.pop();
+            if (undoStack.length) undoStack.pop();
+            redrawAll();
+        });
+
+        clearCanvasBtn.addEventListener('click', function() {
+            paths = [];
+            undoStack = [];
+            currentPath = null;
+            drawing = false;
+            redrawAll();
+        });
+
+        // ---------- Tools ----------
+        lineWidthInput.addEventListener('input', function() {
+            currentWidth = parseInt(this.value);
+            sizeDisplay.textContent = currentWidth;
+        });
+        colorPicker.addEventListener('input', function() {
+            currentColor = this.value;
+        });
+
+        // ---------- Kết nối mô phỏng ----------
+        function setConnection(state) {
+            isConnected = state;
+            if (state) {
+                statusDot.className = 'dot on';
+                statusText.textContent = '✅ Đã kết nối · Sẵn sàng vẽ';
+            } else {
+                statusDot.className = 'dot';
+                statusText.textContent = '⛔ Chưa kết nối';
+                drawing = false;
+                currentPath = null;
+            }
+        }
+
+        connectBtn.addEventListener('click', () => setConnection(true));
+        disconnectBtn.addEventListener('click', () => setConnection(false));
+
+        // Mặc định kết nối
+        setConnection(true);
+
+        // Hiển thị IP local (mô phỏng)
+        fetch('https://api.ipify.org?format=json')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('localIp').textContent = data.ip || '192.168.1.x';
+            })
+            .catch(() => {
+                document.getElementById('localIp').textContent = '192.168.1.x (kiểm tra mạng)';
+            });
+
+        resizeCanvas();
+
+        // Demo: vẽ mẫu
+        setTimeout(() => {
+            paths.push({
+                color: '#3498db',
+                width: 6,
+                points: [{x:120,y:120},{x:220,y:180},{x:300,y:110},{x:400,y:190}]
+            });
+            paths.push({
+                color: '#e67e22',
+                width: 10,
+                points: [{x:500,y:300},{x:580,y:250},{x:640,y:340},{x:700,y:280}]
+            });
+            redrawAll();
+        }, 400);
+    })();
+</script>
+</body>
+</html>
