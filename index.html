@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bảng vẽ từ xa - WebSocket thực tế</title>
+    <title>Bảng vẽ từ xa - PDF & Ảnh sắc nét</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
@@ -24,23 +24,24 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 10px;
+            padding: 8px;
         }
+        /* Header */
         .header {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 10px;
-            padding: 10px 16px;
+            gap: 8px;
+            padding: 8px 14px;
             background: #14142e;
-            border-radius: 16px;
+            border-radius: 14px;
             border: 1px solid #2a2a5a;
             flex-shrink: 0;
         }
         .header h1 {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 400;
             display: flex;
             align-items: center;
@@ -52,9 +53,9 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             background: #1a1a3a;
-            padding: 4px 14px;
+            padding: 4px 12px;
             border-radius: 30px;
         }
         .dot {
@@ -70,11 +71,11 @@
             background: #1e1e42;
             border: 1px solid #3a3a6a;
             color: #ddd;
-            padding: 6px 16px;
+            padding: 5px 14px;
             border-radius: 30px;
             cursor: pointer;
             transition: 0.2s;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -87,30 +88,33 @@
         .btn-danger:hover { background: #e74c3c; }
         .btn-success { background: #27ae60; border-color: #27ae60; }
         .btn-success:hover { background: #2ecc71; }
+        .btn-info { background: #2980b9; border-color: #2980b9; }
+        .btn-info:hover { background: #3498db; }
 
+        /* File bar */
         .file-bar {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            padding: 8px 12px;
+            gap: 6px;
+            padding: 6px 12px;
             background: #10102a;
-            border-radius: 14px;
-            margin: 8px 0;
+            border-radius: 12px;
+            margin: 6px 0;
             flex-shrink: 0;
             align-items: center;
             border: 1px solid #2a2a5a;
         }
         .file-bar label {
             background: #1a1a3a;
-            padding: 4px 14px;
+            padding: 4px 12px;
             border-radius: 30px;
             border: 1px solid #3a3a6a;
             cursor: pointer;
             transition: 0.2s;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
         }
         .file-bar label:hover { background: #2a2a5a; border-color: #f0a500; }
         .file-bar input[type="file"] { display: none; }
@@ -119,19 +123,20 @@
             align-items: center;
             gap: 8px;
             margin-left: auto;
-            font-size: 0.8rem;
-            opacity: 0.7;
-            max-width: 200px;
+            font-size: 0.75rem;
+            opacity: 0.8;
+            max-width: 250px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .file-info i { color: #f0a500; }
 
-        /* Canvas container - có thể cuộn */
+        /* Canvas container - scroll */
         .canvas-container {
             flex: 1;
             background: #0a0a1a;
-            border-radius: 16px;
+            border-radius: 14px;
             border: 1px solid #2a2a5a;
             overflow: auto;
             position: relative;
@@ -148,22 +153,25 @@
             box-shadow: 0 4px 30px rgba(0,0,0,0.5);
             touch-action: none;
             display: inline-block;
+            transition: transform 0.2s ease;
         }
         #drawCanvas {
             display: block;
             touch-action: none;
             cursor: crosshair;
             background: white;
+            image-rendering: auto;
         }
 
+        /* Tools */
         .tools {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px 16px;
-            padding: 8px 12px;
+            gap: 6px 14px;
+            padding: 6px 12px;
             background: #10102a;
-            border-radius: 14px;
-            margin-top: 8px;
+            border-radius: 12px;
+            margin-top: 6px;
             flex-shrink: 0;
             align-items: center;
             border: 1px solid #2a2a5a;
@@ -171,17 +179,18 @@
         .tool-group {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             background: #1a1a3a;
-            padding: 2px 12px;
+            padding: 2px 10px;
             border-radius: 30px;
             border: 1px solid #2a2a5a;
         }
-        .tool-group label { font-size: 0.8rem; opacity: 0.6; }
+        .tool-group label { font-size: 0.75rem; opacity: 0.6; }
         input[type="range"] { width: 80px; accent-color: #f0a500; background: #2a2a5a; height: 4px; border-radius: 10px; }
-        input[type="color"] { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #3a3a6a; padding: 2px; background: transparent; cursor: pointer; }
+        input[type="color"] { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #3a3a6a; padding: 2px; background: transparent; cursor: pointer; }
 
-        .connection-guide {
+        /* Guide */
+        .guide-panel {
             position: fixed;
             bottom: 80px;
             right: 20px;
@@ -189,25 +198,25 @@
             border: 1px solid #f0a500;
             border-radius: 16px;
             padding: 16px 20px;
-            max-width: 320px;
+            max-width: 340px;
             font-size: 0.8rem;
             z-index: 1000;
             box-shadow: 0 10px 40px rgba(0,0,0,0.8);
             display: none;
         }
-        .connection-guide.show { display: block; }
-        .connection-guide h4 { color: #f0a500; margin-bottom: 8px; }
-        .connection-guide ul { list-style: none; line-height: 1.8; }
-        .connection-guide ul li::before { content: "▸ "; color: #f0a500; }
-        .connection-guide .close-guide { float: right; background: none; border: none; color: #aaa; font-size: 1.2rem; cursor: pointer; }
+        .guide-panel.show { display: block; }
+        .guide-panel h4 { color: #f0a500; margin-bottom: 8px; }
+        .guide-panel ul { list-style: none; line-height: 1.8; }
+        .guide-panel ul li::before { content: "▸ "; color: #f0a500; }
+        .guide-panel .close-guide { float: right; background: none; border: none; color: #aaa; font-size: 1.2rem; cursor: pointer; }
 
         @media (max-width: 700px) {
             .header h1 { font-size: 1rem; }
-            .file-bar label { font-size: 0.7rem; padding: 3px 10px; }
-            .tools { gap: 6px; }
-            .tool-group { padding: 2px 8px; }
+            .file-bar label { font-size: 0.65rem; padding: 3px 8px; }
+            .tools { gap: 4px; }
+            .tool-group { padding: 2px 6px; }
             input[type="range"] { width: 60px; }
-            .connection-guide { max-width: 90%; bottom: 10px; right: 5%; }
+            .guide-panel { max-width: 90%; bottom: 10px; right: 5%; }
         }
     </style>
 </head>
@@ -222,7 +231,7 @@
         </div>
         <button class="btn btn-primary" id="connectBtn"><i class="fas fa-link"></i> Kết nối</button>
         <button class="btn btn-danger" id="disconnectBtn"><i class="fas fa-unlink"></i> Ngắt</button>
-        <button class="btn" id="guideToggle"><i class="fas fa-question-circle"></i> Hướng dẫn</button>
+        <button class="btn btn-info" id="guideToggle"><i class="fas fa-question-circle"></i> Hướng dẫn</button>
     </div>
 
     <!-- File bar -->
@@ -238,12 +247,13 @@
             <i class="fas fa-file" id="fileIcon"></i>
             <span id="fileName">Chưa có file</span>
         </div>
+        <button class="btn btn-success" id="zoomFitBtn"><i class="fas fa-expand"></i> Vừa khung</button>
     </div>
 
-    <!-- Canvas container có thể cuộn -->
+    <!-- Canvas container -->
     <div class="canvas-container" id="canvasContainer">
         <div class="canvas-wrapper" id="canvasWrapper">
-            <canvas id="drawCanvas" width="1000" height="700"></canvas>
+            <canvas id="drawCanvas" width="1200" height="800"></canvas>
         </div>
     </div>
 
@@ -251,8 +261,8 @@
     <div class="tools">
         <div class="tool-group">
             <label><i class="fas fa-pen"></i></label>
-            <input type="range" id="lineWidth" min="2" max="40" value="6">
-            <span id="sizeDisplay" style="min-width:24px; font-size:0.8rem;">6</span>
+            <input type="range" id="lineWidth" min="2" max="50" value="6">
+            <span id="sizeDisplay" style="min-width:24px; font-size:0.75rem;">6</span>
         </div>
         <div class="tool-group">
             <label><i class="fas fa-palette"></i></label>
@@ -260,23 +270,22 @@
         </div>
         <button class="btn" id="undoBtn"><i class="fas fa-undo-alt"></i> Hoàn tác</button>
         <button class="btn btn-danger" id="clearCanvasBtn"><i class="fas fa-eraser"></i> Xóa vẽ</button>
-        <button class="btn btn-success" id="zoomFitBtn"><i class="fas fa-expand"></i> Vừa khung</button>
     </div>
 </div>
 
-<!-- Hướng dẫn kết nối -->
-<div class="connection-guide" id="guidePanel">
+<!-- Guide -->
+<div class="guide-panel" id="guidePanel">
     <button class="close-guide" id="closeGuide">&times;</button>
     <h4><i class="fas fa-plug"></i> Kết nối WebSocket</h4>
     <ul>
-        <li><strong>Bước 1:</strong> Mở trang này trên <strong>Máy tính</strong> và <strong>Điện thoại</strong></li>
+        <li><strong>Bước 1:</strong> Mở trang trên <strong>Máy tính</strong> và <strong>Điện thoại</strong></li>
         <li><strong>Bước 2:</strong> Trên <strong>Máy tính</strong>, nhấn <strong>"Kết nối"</strong></li>
         <li><strong>Bước 3:</strong> Trên <strong>Điện thoại</strong>, nhấn <strong>"Kết nối"</strong></li>
-        <li><strong>Bước 4:</strong> Vẽ trên thiết bị nào cũng được đồng bộ</li>
+        <li><strong>Bước 4:</strong> Vẽ trên thiết bị nào cũng đồng bộ</li>
         <li><strong>Lưu ý:</strong> Cần cùng mạng WiFi</li>
         <li><strong>WebSocket:</strong> wss://echo.websocket.org (demo)</li>
     </ul>
-    <div style="margin-top:10px; font-size:0.75rem; opacity:0.6;">
+    <div style="margin-top:10px; font-size:0.7rem; opacity:0.6;">
         <i class="fas fa-info-circle"></i> Nhấn "Kết nối" để bắt đầu
     </div>
 </div>
@@ -321,43 +330,40 @@
         let currentPath = null;
         let undoStack = [];
         let bgImage = null;
-        let zoomLevel = 1;
+        let bgImageData = null; // lưu dataURL để đồng bộ
 
         // ---------- WebSocket ----------
         function connectWebSocket() {
             if (ws && ws.readyState === WebSocket.OPEN) return;
             try {
-                // Sử dụng WebSocket echo server cho demo
                 ws = new WebSocket('wss://echo.websocket.org');
                 ws.onopen = function() {
                     setConnection(true);
-                    statusText.textContent = '✅ Đã kết nối WebSocket';
-                    ws.send(JSON.stringify({ type: 'join', device: navigator.userAgent.includes('Mobile') ? 'phone' : 'desktop' }));
+                    statusText.textContent = '✅ Đã kết nối';
+                    // Gửi thông tin thiết bị
+                    ws.send(JSON.stringify({
+                        type: 'join',
+                        device: navigator.userAgent.includes('Mobile') ? 'phone' : 'desktop',
+                        timestamp: Date.now()
+                    }));
                 };
                 ws.onmessage = function(event) {
                     try {
                         const data = JSON.parse(event.data);
-                        if (data.type === 'draw') {
-                            // Nhận nét vẽ từ thiết bị khác
-                            if (data.path) {
-                                paths.push(data.path);
-                                redrawAll();
-                            }
+                        if (data.type === 'draw' && data.path) {
+                            paths.push(data.path);
+                            redrawAll();
                         } else if (data.type === 'clear') {
                             paths = [];
                             redrawAll();
                         } else if (data.type === 'undo') {
                             if (paths.length > 0) paths.pop();
                             redrawAll();
-                        } else if (data.type === 'file') {
-                            // Nhận file từ thiết bị khác (chỉ thông báo)
-                            if (data.fileName) {
-                                fileName.textContent = data.fileName + ' (đồng bộ)';
-                            }
+                        } else if (data.type === 'file' && data.dataURL) {
+                            // Nhận file từ thiết bị khác
+                            loadImageFromDataURL(data.dataURL, data.fileName, data.fileType);
                         }
-                    } catch (e) {
-                        // Bỏ qua
-                    }
+                    } catch (e) {}
                 };
                 ws.onclose = function() {
                     setConnection(false);
@@ -379,7 +385,7 @@
                 ws = null;
             }
             setConnection(false);
-            statusText.textContent = '⛔ Đã ngắt kết nối';
+            statusText.textContent = '⛔ Đã ngắt';
         }
 
         function sendDrawData(path) {
@@ -400,13 +406,20 @@
             }
         }
 
+        function sendFileData(dataURL, name, type) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'file',
+                    dataURL: dataURL,
+                    fileName: name,
+                    fileType: type
+                }));
+            }
+        }
+
         function setConnection(state) {
             isConnected = state;
-            if (state) {
-                statusDot.className = 'dot on';
-            } else {
-                statusDot.className = 'dot';
-            }
+            statusDot.className = 'dot' + (state ? ' on' : '');
         }
 
         // ---------- Canvas vẽ ----------
@@ -459,7 +472,6 @@
                     const pathCopy = { ...currentPath, points: [...currentPath.points] };
                     paths.push(pathCopy);
                     undoStack.push({ type: 'path', path: pathCopy });
-                    // Gửi qua WebSocket
                     sendDrawData(pathCopy);
                 }
                 currentPath = null;
@@ -471,13 +483,11 @@
             }
         }
 
-        // Mouse events
+        // Events
         canvas.addEventListener('mousedown', startDrawing);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseup', stopDrawing);
         canvas.addEventListener('mouseleave', stopDrawing);
-
-        // Touch events
         canvas.addEventListener('touchstart', startDrawing, { passive: false });
         canvas.addEventListener('touchmove', draw, { passive: false });
         canvas.addEventListener('touchend', stopDrawing, { passive: false });
@@ -517,6 +527,137 @@
             }
         }
 
+        // ---------- Load image ----------
+        function loadImageFromDataURL(dataURL, name, type) {
+            const img = new Image();
+            img.onload = function() {
+                bgImage = img;
+                bgImageData = dataURL;
+                fileName.textContent = name;
+                const iconMap = {
+                    'image': 'fa-image',
+                    'pdf': 'fa-file-pdf',
+                    'word': 'fa-file-word'
+                };
+                fileIcon.className = 'fas ' + (iconMap[type] || 'fa-file');
+                redrawAll();
+                setTimeout(() => zoomFitBtn.click(), 200);
+            };
+            img.onerror = function() {
+                alert('Không thể tải file. Vui lòng thử lại.');
+            };
+            img.src = dataURL;
+        }
+
+        // ---------- PDF handling ----------
+        const pdfjsLib = window.pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        function renderPDFToImage(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                pdfjsLib.getDocument({ data }).promise.then(function(pdf) {
+                    pdf.getPage(1).then(function(page) {
+                        // Render với chất lượng cao
+                        const scale = 2.5;
+                        const viewport = page.getViewport({ scale: scale });
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = viewport.width;
+                        tempCanvas.height = viewport.height;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.imageSmoothingEnabled = true;
+                        tempCtx.imageSmoothingQuality = 'high';
+                        page.render({
+                            canvasContext: tempCtx,
+                            viewport: viewport
+                        }).promise.then(function() {
+                            const dataURL = tempCanvas.toDataURL('image/png');
+                            loadImageFromDataURL(dataURL, file.name, 'pdf');
+                            sendFileData(dataURL, file.name, 'pdf');
+                        });
+                    });
+                }).catch(function(err) {
+                    alert('Không thể đọc PDF: ' + err.message);
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ---------- Word handling ----------
+        function handleWordFile(file) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 1200;
+            tempCanvas.height = 800;
+            const tctx = tempCanvas.getContext('2d');
+            tctx.imageSmoothingEnabled = true;
+            tctx.imageSmoothingQuality = 'high';
+            // Gradient đẹp
+            const grad = tctx.createLinearGradient(0, 0, 1200, 800);
+            grad.addColorStop(0, '#f8f8f4');
+            grad.addColorStop(1, '#e8e8e0');
+            tctx.fillStyle = grad;
+            tctx.fillRect(0, 0, 1200, 800);
+            // Trang trí
+            tctx.fillStyle = '#1a2a4a';
+            tctx.font = 'bold 56px "Segoe UI", sans-serif';
+            tctx.textAlign = 'center';
+            tctx.textBaseline = 'middle';
+            tctx.fillText('📄 Word Document', 600, 280);
+            tctx.font = '32px "Segoe UI", sans-serif';
+            tctx.fillStyle = '#2c3e50';
+            tctx.fillText(file.name, 600, 370);
+            tctx.fillStyle = '#7f8c8d';
+            tctx.font = '22px "Segoe UI", sans-serif';
+            tctx.fillText('(Nội dung Word được hiển thị dạng ảnh)', 600, 450);
+            // Đường kẻ trang trí
+            tctx.strokeStyle = '#bdc3c7';
+            tctx.lineWidth = 2;
+            tctx.beginPath();
+            tctx.moveTo(200, 520);
+            tctx.lineTo(1000, 520);
+            tctx.stroke();
+            const dataURL = tempCanvas.toDataURL('image/png');
+            loadImageFromDataURL(dataURL, file.name, 'word');
+            sendFileData(dataURL, file.name, 'word');
+        }
+
+        // ---------- File events ----------
+        imageInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const dataURL = e.target.result;
+                    loadImageFromDataURL(dataURL, imageInput.files[0].name, 'image');
+                    sendFileData(dataURL, imageInput.files[0].name, 'image');
+                };
+                reader.readAsDataURL(this.files[0]);
+            }
+            this.value = '';
+        });
+
+        pdfInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                renderPDFToImage(this.files[0]);
+            }
+            this.value = '';
+        });
+
+        wordInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                handleWordFile(this.files[0]);
+            }
+            this.value = '';
+        });
+
+        clearFileBtn.addEventListener('click', function() {
+            bgImage = null;
+            bgImageData = null;
+            fileName.textContent = 'Chưa có file';
+            fileIcon.className = 'fas fa-file';
+            redrawAll();
+        });
+
         // ---------- Tools ----------
         lineWidthInput.addEventListener('input', function() {
             currentWidth = parseInt(this.value);
@@ -552,114 +693,14 @@
             const availH = containerRect.height - pad * 2;
             const scaleX = availW / canvasRect.width;
             const scaleY = availH / canvasRect.height;
-            const scale = Math.min(scaleX, scaleY, 2);
+            const scale = Math.min(scaleX, scaleY, 2.5);
             wrapper.style.transform = `scale(${scale})`;
             wrapper.style.transformOrigin = 'center center';
         });
 
-        // ---------- File handling ----------
-        function loadImageFromDataURL(dataURL, name, type) {
-            const img = new Image();
-            img.onload = function() {
-                bgImage = img;
-                fileName.textContent = name;
-                fileIcon.className = 'fas ' + (type === 'image' ? 'fa-image' : type === 'pdf' ? 'fa-file-pdf' : 'fa-file-word');
-                redrawAll();
-                // Tự động fit
-                setTimeout(() => zoomFitBtn.click(), 100);
-            };
-            img.src = dataURL;
-        }
-
-        // PDF render
-        const pdfjsLib = window.pdfjsLib;
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-        function renderPDFToImage(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                pdfjsLib.getDocument({ data }).promise.then(function(pdf) {
-                    pdf.getPage(1).then(function(page) {
-                        const viewport = page.getViewport({ scale: 2 });
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = viewport.width;
-                        tempCanvas.height = viewport.height;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(function() {
-                            const dataURL = tempCanvas.toDataURL('image/png');
-                            loadImageFromDataURL(dataURL, file.name, 'pdf');
-                        });
-                    });
-                }).catch(function(err) {
-                    alert('Không thể đọc PDF: ' + err.message);
-                });
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function handleWordFile(file) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 1000;
-            tempCanvas.height = 700;
-            const tctx = tempCanvas.getContext('2d');
-            // Gradient nền
-            const grad = tctx.createLinearGradient(0, 0, 1000, 700);
-            grad.addColorStop(0, '#f5f5f0');
-            grad.addColorStop(1, '#e8e8e0');
-            tctx.fillStyle = grad;
-            tctx.fillRect(0, 0, 1000, 700);
-            tctx.fillStyle = '#1a2a4a';
-            tctx.font = 'bold 48px sans-serif';
-            tctx.textAlign = 'center';
-            tctx.textBaseline = 'middle';
-            tctx.fillText('📄 Word Document', 500, 250);
-            tctx.font = '28px sans-serif';
-            tctx.fillStyle = '#333';
-            tctx.fillText(file.name, 500, 340);
-            tctx.fillStyle = '#666';
-            tctx.font = '20px sans-serif';
-            tctx.fillText('(Nội dung Word được mô phỏng)', 500, 420);
-            const dataURL = tempCanvas.toDataURL('image/png');
-            loadImageFromDataURL(dataURL, file.name, 'word');
-        }
-
-        imageInput.addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    loadImageFromDataURL(e.target.result, imageInput.files[0].name, 'image');
-                };
-                reader.readAsDataURL(this.files[0]);
-            }
-            this.value = '';
-        });
-
-        pdfInput.addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                renderPDFToImage(this.files[0]);
-            }
-            this.value = '';
-        });
-
-        wordInput.addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                handleWordFile(this.files[0]);
-            }
-            this.value = '';
-        });
-
-        clearFileBtn.addEventListener('click', function() {
-            bgImage = null;
-            fileName.textContent = 'Chưa có file';
-            fileIcon.className = 'fas fa-file';
-            redrawAll();
-        });
-
-        // ---------- Connection buttons ----------
+        // ---------- Connection ----------
         connectBtn.addEventListener('click', function() {
             connectWebSocket();
-            // Hiện hướng dẫn
             guidePanel.classList.add('show');
         });
 
@@ -674,40 +715,38 @@
         closeGuide.addEventListener('click', function() {
             guidePanel.classList.remove('show');
         });
-        // Click outside để đóng
         document.addEventListener('click', function(e) {
             if (guidePanel.classList.contains('show') && !guidePanel.contains(e.target) && e.target !== guideToggle) {
                 guidePanel.classList.remove('show');
             }
         });
 
-        // ---------- Khởi tạo ----------
-        // Tự động kết nối khi tải trang
-        setTimeout(() => {
-            connectWebSocket();
-        }, 500);
+        // ---------- Init ----------
+        // Tự động kết nối
+        setTimeout(() => connectWebSocket(), 500);
 
         // Fit canvas ban đầu
         setTimeout(() => zoomFitBtn.click(), 800);
 
-        // Resize khi thay đổi cửa sổ
+        // Resize
         let resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => zoomFitBtn.click(), 300);
         });
 
-        // Vẽ mẫu
+        // Mẫu vẽ
         setTimeout(() => {
             const samplePath = {
                 color: '#3498db',
                 width: 8,
                 points: [
                     {x: 150, y: 150},
-                    {x: 250, y: 200},
-                    {x: 350, y: 130},
-                    {x: 450, y: 220},
-                    {x: 550, y: 160}
+                    {x: 280, y: 200},
+                    {x: 400, y: 130},
+                    {x: 520, y: 250},
+                    {x: 650, y: 170},
+                    {x: 780, y: 220}
                 ]
             };
             paths.push(samplePath);
