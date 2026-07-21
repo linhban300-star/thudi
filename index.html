@@ -1260,44 +1260,91 @@
             redrawAll();
         });
 
-        // ---------- Lưu file về máy: PDF hoặc Word ----------
+        // ---------- Lưu file về máy: PDF hoặc Word (ĐẦY ĐỦ TẤT CẢ CÁC TRANG) ----------
         function getExportBaseName() {
             let baseName = 'ban-ve';
             if (fileState && fileState.name) {
                 baseName = fileState.name.replace(/\.[^/.]+$/, '');
             }
-            const pageSuffix = (fileState && fileState.pages && fileState.pages.length > 1)
-                ? ('-trang' + (currentPageIndex + 1))
-                : '';
-            return baseName + pageSuffix;
+            return baseName;
         }
 
-        savePdfBtn.addEventListener('click', function() {
+        // Ghép ảnh nền của 1 trang + nét vẽ (mực) của trang đó thành 1 canvas hoàn chỉnh,
+        // dùng để xuất file (không phụ thuộc vào trang đang hiển thị trên màn hình)
+        function buildPageCanvas(idx) {
+            return new Promise(function(resolve, reject) {
+                const pageData = fileState.pages[idx];
+                const img = new Image();
+                img.onload = function() {
+                    const pc = document.createElement('canvas');
+                    pc.width = pageData.width;
+                    pc.height = pageData.height;
+                    const pctx = pc.getContext('2d');
+                    pctx.drawImage(img, 0, 0, pageData.width, pageData.height);
+                    const pagePaths = allPagePaths[idx] || [];
+                    for (let p of pagePaths) {
+                        drawPath(pctx, p);
+                    }
+                    resolve(pc);
+                };
+                img.onerror = function() {
+                    reject(new Error('Không thể tải ảnh trang ' + (idx + 1)));
+                };
+                img.src = pageData.dataURL;
+            });
+        }
+
+        savePdfBtn.addEventListener('click', async function() {
             try {
-                const dataURL = canvas.toDataURL('image/png');
                 const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
-                const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
-                const doc = new jsPDFCtor({
-                    orientation: orientation,
-                    unit: 'px',
-                    format: [canvas.width, canvas.height]
-                });
-                doc.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
+                let doc = null;
+                if (fileState && fileState.pages && fileState.pages.length > 0) {
+                    // Xuất ĐẦY ĐỦ tất cả các trang trong file (kể cả trang chưa vẽ gì)
+                    for (let i = 0; i < fileState.pages.length; i++) {
+                        const pc = await buildPageCanvas(i);
+                        const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
+                        const dataURL = pc.toDataURL('image/png');
+                        if (!doc) {
+                            doc = new jsPDFCtor({ orientation: orientation, unit: 'px', format: [pc.width, pc.height] });
+                        } else {
+                            doc.addPage([pc.width, pc.height], orientation);
+                        }
+                        doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
+                    }
+                } else {
+                    // Không có file (bảng vẽ trắng) -> chỉ có 1 trang là canvas hiện tại
+                    const dataURL = canvas.toDataURL('image/png');
+                    const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
+                    doc = new jsPDFCtor({ orientation: orientation, unit: 'px', format: [canvas.width, canvas.height] });
+                    doc.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
+                }
                 doc.save(getExportBaseName() + '.pdf');
             } catch (err) {
                 alert('Không thể lưu file PDF: ' + err.message);
             }
         });
 
-        saveWordBtn.addEventListener('click', function() {
+        saveWordBtn.addEventListener('click', async function() {
             try {
-                const dataURL = canvas.toDataURL('image/png');
+                let imagesHtml = '';
+                if (fileState && fileState.pages && fileState.pages.length > 0) {
+                    // Xuất ĐẦY ĐỦ tất cả các trang trong file (kể cả trang chưa vẽ gì)
+                    for (let i = 0; i < fileState.pages.length; i++) {
+                        const pc = await buildPageCanvas(i);
+                        const dataURL = pc.toDataURL('image/png');
+                        const breakStyle = (i < fileState.pages.length - 1) ? 'page-break-after:always;' : '';
+                        imagesHtml += '<div style="' + breakStyle + '"><img src="' + dataURL + '" style="max-width:100%;" /></div>';
+                    }
+                } else {
+                    const dataURL = canvas.toDataURL('image/png');
+                    imagesHtml = '<img src="' + dataURL + '" style="max-width:100%;" />';
+                }
                 const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
                     'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
                     'xmlns="http://www.w3.org/TR/REC-html40">' +
                     '<head><meta charset="utf-8"><title>Bảng vẽ</title></head>' +
                     '<body style="margin:0;padding:20px;">' +
-                    '<img src="' + dataURL + '" style="max-width:100%;" />' +
+                    imagesHtml +
                     '</body></html>';
                 const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
                 const url = URL.createObjectURL(blob);
