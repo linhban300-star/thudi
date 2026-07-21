@@ -527,9 +527,14 @@
         // false = mất kết nối ngoài ý muốn (mất mạng, out app...) -> tự động thử kết nối lại
         let manualDisconnect = true;
         let reconnectTimer = null;
+        let connectAttemptTimer = null;
 
         function clearReconnectTimer() {
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        }
+
+        function clearConnectAttemptTimer() {
+            if (connectAttemptTimer) { clearTimeout(connectAttemptTimer); connectAttemptTimer = null; }
         }
 
         function ensureRoomCode() {
@@ -553,21 +558,15 @@
             }, delayMs || 2500);
         }
 
-        function connectPeer() {
-            const code = ensureRoomCode();
-            manualDisconnect = false;
-            clearReconnectTimer();
+        function startHostPeer(code) {
+            clearConnectAttemptTimer();
+            if (peer && !peer.destroyed && isHost) return;
             teardownPeer();
-            statusText.textContent = '⏳ Đang kết nối...';
-
-            // Thử làm "host" với ID = mã phòng
             peer = new Peer('wb-' + code, { debug: 0 });
-
             peer.on('open', function() {
                 isHost = true;
                 statusText.textContent = '📡 Phòng ' + code + ' — chờ thiết bị kia...';
             });
-
             peer.on('connection', function(c) {
                 if (conn && conn.open) {
                     c.close();
@@ -576,18 +575,16 @@
                 conn = c;
                 wireConnection();
             });
-
-            // Nếu tuột kết nối tới máy chủ tín hiệu (không phải bị đối phương ngắt) -> tự nối lại, giữ nguyên vai trò + nội dung
             peer.on('disconnected', function() {
                 if (!manualDisconnect) {
                     try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
                 }
             });
-
             peer.on('error', function(err) {
                 if (err.type === 'unavailable-id') {
-                    // Đã có host dùng mã này -> tự làm client và nối vào
-                    if (peer) peer.destroy();
+                    if (peer) {
+                        try { peer.destroy(); } catch (e) {}
+                    }
                     isHost = false;
                     startClientPeer(code);
                 } else {
@@ -596,6 +593,22 @@
                     if (!manualDisconnect) scheduleReconnect(3000);
                 }
             });
+        }
+
+        function connectPeer() {
+            const code = ensureRoomCode();
+            manualDisconnect = false;
+            clearReconnectTimer();
+            clearConnectAttemptTimer();
+            teardownPeer();
+            statusText.textContent = '⏳ Đang kết nối...';
+
+            startClientPeer(code);
+            connectAttemptTimer = setTimeout(function() {
+                if (!manualDisconnect && !isConnected && (!conn || !conn.open)) {
+                    startHostPeer(code);
+                }
+            }, 1800);
         }
 
         // Tạo peer đóng vai "client" và nối vào phòng theo mã code
@@ -609,21 +622,34 @@
                     try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
                 }
             });
-            peer.on('error', function() {
-                statusText.textContent = '❌ Lỗi kết nối';
-                setConnection(false);
-                if (!manualDisconnect) scheduleReconnect(3000);
+            peer.on('error', function(err) {
+                if (!manualDisconnect && !isConnected && (err.type === 'peer-unavailable' || err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error')) {
+                    clearConnectAttemptTimer();
+                    startHostPeer(code);
+                } else {
+                    statusText.textContent = '❌ Lỗi kết nối';
+                    setConnection(false);
+                    if (!manualDisconnect) scheduleReconnect(3000);
+                }
             });
         }
 
         function tryClientConnect(code) {
             if (manualDisconnect || !peer) return;
             conn = peer.connect('wb-' + code, { reliable: true });
-            conn.on('open', wireConnection);
-            conn.on('error', function() {
-                statusText.textContent = '❌ Không thể kết nối tới phòng';
-                setConnection(false);
-                if (!manualDisconnect) scheduleReconnect(3000);
+            conn.on('open', function() {
+                clearConnectAttemptTimer();
+                wireConnection();
+            });
+            conn.on('error', function(err) {
+                if (!manualDisconnect && !isConnected) {
+                    clearConnectAttemptTimer();
+                    startHostPeer(code);
+                } else {
+                    statusText.textContent = '❌ Không thể kết nối tới phòng';
+                    setConnection(false);
+                    if (!manualDisconnect) scheduleReconnect(3000);
+                }
             });
         }
 
@@ -631,37 +657,7 @@
         function attemptReconnect() {
             if (manualDisconnect || isConnected || !roomCode) return;
             statusText.textContent = '🔄 Đang tự động kết nối lại...';
-            if (isHost) {
-                if (peer && !peer.destroyed) {
-                    // Peer vẫn còn sống -> chỉ cần chờ thiết bị kia nối lại (đã có sẵn listener 'connection')
-                    if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} }
-                    statusText.textContent = '📡 Phòng ' + roomCode + ' — chờ thiết bị kia nối lại...';
-                } else {
-                    // Peer đã chết hẳn -> mở lại làm host với đúng mã phòng cũ
-                    peer = new Peer('wb-' + roomCode, { debug: 0 });
-                    peer.on('open', function() {
-                        isHost = true;
-                        statusText.textContent = '📡 Phòng ' + roomCode + ' — chờ thiết bị kia nối lại...';
-                    });
-                    peer.on('connection', function(c) { conn = c; wireConnection(); });
-                    peer.on('disconnected', function() {
-                        if (!manualDisconnect) { try { peer.reconnect(); } catch (e) {} }
-                    });
-                    peer.on('error', function() { scheduleReconnect(3000); });
-                }
-            } else {
-                if (peer && !peer.destroyed) {
-                    if (peer.disconnected) {
-                        try { peer.reconnect(); } catch (e) {}
-                        peer.once('open', function() { tryClientConnect(roomCode); });
-                    } else {
-                        tryClientConnect(roomCode);
-                    }
-                } else {
-                    startClientPeer(roomCode);
-                }
-            }
-            // Đảm bảo vẫn còn 1 lượt thử tiếp theo phòng khi lượt này chưa thành công
+            connectPeer();
             scheduleReconnect(4000);
         }
 
