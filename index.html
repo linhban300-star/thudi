@@ -220,6 +220,78 @@
         .guide-panel ul li::before { content: "▸ "; color: #f0a500; }
         .guide-panel .close-guide { float: right; background: none; border: none; color: #aaa; font-size: 1.2rem; cursor: pointer; }
 
+        /* Công cụ chọn loại nét vẽ */
+        .tool-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #1e1e42;
+            border: 1px solid #3a3a6a;
+            color: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+        .tool-btn:hover { background: #2e2e5a; border-color: #f0a500; }
+        .tool-btn.active { background: #f0a500; color: #0a0a1a; border-color: #f0a500; }
+
+        /* Nút tròn nổi mở bảng công cụ khi ở chế độ toàn màn hình (điện thoại) */
+        .fab-toolbar-toggle {
+            display: none;
+            position: fixed;
+            bottom: 22px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #f0a500;
+            color: #0a0a1a;
+            border: none;
+            font-size: 1.4rem;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+            z-index: 2000;
+        }
+        .fab-toolbar-toggle:active { background: #ffb820; }
+
+        #exitFullscreenBtn { display: none; }
+
+        /* Chế độ toàn màn hình: ẩn header/file-bar, bảng công cụ biến thành panel nổi bật lên khi nhấn FAB */
+        body.fullscreen-mode .header,
+        body.fullscreen-mode .file-bar {
+            display: none;
+        }
+        body.fullscreen-mode .app { padding: 4px; }
+        body.fullscreen-mode .canvas-container { border-radius: 6px; }
+        body.fullscreen-mode .fab-toolbar-toggle { display: flex; }
+        body.fullscreen-mode #exitFullscreenBtn { display: inline-flex; }
+        body.fullscreen-mode .tools {
+            display: none;
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            left: auto;
+            width: auto;
+            max-width: min(260px, 80vw);
+            flex-direction: column;
+            align-items: stretch;
+            background: #14142e;
+            border: 1px solid #f0a500;
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            z-index: 1900;
+            margin-top: 0;
+        }
+        body.fullscreen-mode .tools.show { display: flex; }
+        body.fullscreen-mode .tools .tool-group { justify-content: center; }
+
         @media (max-width: 700px) {
             .header h1 { font-size: 1rem; }
             .file-bar label { font-size: 0.65rem; padding: 3px 8px; }
@@ -246,6 +318,7 @@
         <button class="btn btn-primary" id="connectBtn"><i class="fas fa-link"></i> Kết nối</button>
         <button class="btn btn-danger" id="disconnectBtn"><i class="fas fa-unlink"></i> Ngắt</button>
         <button class="btn" id="copyLinkBtn"><i class="fas fa-copy"></i> Copy link</button>
+        <button class="btn btn-info" id="fullscreenBtn"><i class="fas fa-expand"></i> Toàn màn hình</button>
         <button class="btn btn-info" id="guideToggle"><i class="fas fa-question-circle"></i> Hướng dẫn</button>
     </div>
 
@@ -281,8 +354,15 @@
 
     <!-- Tools -->
     <div class="tools">
+        <div class="tool-group" id="toolSelectGroup">
+            <button class="tool-btn active" data-tool="pen" title="Bút vẽ"><i class="fas fa-pen"></i></button>
+            <button class="tool-btn" data-tool="eraser" title="Tẩy"><i class="fas fa-eraser"></i></button>
+            <button class="tool-btn" data-tool="line" title="Đường thẳng"><i class="fas fa-slash"></i></button>
+            <button class="tool-btn" data-tool="curve" title="Đường cong"><i class="fas fa-wave-square"></i></button>
+            <button class="tool-btn" data-tool="circle" title="Đường tròn"><i class="far fa-circle"></i></button>
+        </div>
         <div class="tool-group">
-            <label><i class="fas fa-pen"></i></label>
+            <label><i class="fas fa-ruler-horizontal"></i></label>
             <input type="range" id="lineWidth" min="2" max="50" value="6">
             <span id="sizeDisplay" style="min-width:24px; font-size:0.75rem;">6</span>
         </div>
@@ -292,8 +372,12 @@
         </div>
         <button class="btn" id="undoBtn"><i class="fas fa-undo-alt"></i> Hoàn tác</button>
         <button class="btn btn-danger" id="clearCanvasBtn"><i class="fas fa-eraser"></i> Xóa vẽ</button>
+        <button class="btn btn-danger" id="exitFullscreenBtn"><i class="fas fa-compress"></i> Thoát toàn màn hình</button>
     </div>
 </div>
+
+<!-- Nút nổi mở bảng công cụ khi ở chế độ toàn màn hình -->
+<button class="fab-toolbar-toggle" id="fabToolsToggle" title="Công cụ vẽ"><i class="fas fa-toolbox"></i></button>
 
 <!-- Guide -->
 <div class="guide-panel" id="guidePanel">
@@ -336,6 +420,11 @@
         const undoBtn = document.getElementById('undoBtn');
         const clearCanvasBtn = document.getElementById('clearCanvasBtn');
         const clearFileBtn = document.getElementById('clearFileBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const fabToolsToggle = document.getElementById('fabToolsToggle');
+        const toolsPanel = document.querySelector('.tools');
+        const toolButtons = document.querySelectorAll('.tool-btn');
         const zoomFitBtn = document.getElementById('zoomFitBtn');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -359,6 +448,7 @@
         let drawing = false;
         let currentColor = '#e74c3c';
         let currentWidth = 6;
+        let currentTool = 'pen'; // pen | eraser | line | curve | circle
         let paths = [];          // nét vẽ của TRANG hiện tại (tham chiếu tới allPagePaths[currentPageIndex])
         let currentPath = null;
         let bgImage = null;      // ảnh (Image object) của trang đang hiển thị
@@ -552,10 +642,14 @@
             e.preventDefault();
             const pos = getCanvasCoords(e);
             drawing = true;
+            const isShapeTool = (currentTool === 'line' || currentTool === 'circle');
             currentPath = {
+                tool: currentTool,
                 color: currentColor,
-                width: currentWidth,
-                points: [{ x: pos.x, y: pos.y }]
+                width: currentTool === 'eraser' ? currentWidth * 2 : currentWidth,
+                points: isShapeTool
+                    ? [{ x: pos.x, y: pos.y }, { x: pos.x, y: pos.y }]
+                    : [{ x: pos.x, y: pos.y }]
             };
             redrawAll();
         }
@@ -564,7 +658,13 @@
             if (!drawing || !currentPath || !isConnected) return;
             e.preventDefault();
             const pos = getCanvasCoords(e);
-            currentPath.points.push({ x: pos.x, y: pos.y });
+            if (currentPath.tool === 'line' || currentPath.tool === 'circle') {
+                // Đường thẳng / đường tròn: chỉ giữ điểm bắt đầu và điểm hiện tại (xem trước khi kéo)
+                currentPath.points[1] = { x: pos.x, y: pos.y };
+            } else {
+                // Bút / tẩy / đường cong: ghi lại toàn bộ đường kéo
+                currentPath.points.push({ x: pos.x, y: pos.y });
+            }
             redrawAll();
         }
 
@@ -690,23 +790,77 @@
         }
 
         function drawPath(context, path) {
-            if (path.points.length < 1) return;
-            context.beginPath();
+            if (!path.points || path.points.length < 1) return;
+            const tool = path.tool || 'pen';
+            context.save();
+            context.globalCompositeOperation = (tool === 'eraser') ? 'destination-out' : 'source-over';
             context.strokeStyle = path.color;
+            context.fillStyle = path.color;
             context.lineWidth = path.width;
             context.lineCap = 'round';
             context.lineJoin = 'round';
-            if (path.points.length === 1) {
-                context.arc(path.points[0].x, path.points[0].y, path.width/2, 0, Math.PI*2);
-                context.fillStyle = path.color;
-                context.fill();
-            } else {
-                context.moveTo(path.points[0].x, path.points[0].y);
-                for (let i = 1; i < path.points.length; i++) {
-                    context.lineTo(path.points[i].x, path.points[i].y);
+
+            if (tool === 'circle') {
+                const p0 = path.points[0];
+                const p1 = path.points[1] || path.points[0];
+                const radius = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                if (radius > 0.5) {
+                    context.beginPath();
+                    context.arc(p0.x, p0.y, radius, 0, Math.PI * 2);
+                    context.stroke();
                 }
+            } else if (tool === 'line') {
+                const p0 = path.points[0];
+                const p1 = path.points[1] || path.points[0];
+                context.beginPath();
+                context.moveTo(p0.x, p0.y);
+                context.lineTo(p1.x, p1.y);
                 context.stroke();
+            } else if (tool === 'curve') {
+                drawSmoothCurve(context, path.points);
+            } else {
+                // Bút / tẩy: nét vẽ tự do
+                if (path.points.length === 1) {
+                    context.beginPath();
+                    context.arc(path.points[0].x, path.points[0].y, path.width / 2, 0, Math.PI * 2);
+                    context.fill();
+                } else {
+                    context.beginPath();
+                    context.moveTo(path.points[0].x, path.points[0].y);
+                    for (let i = 1; i < path.points.length; i++) {
+                        context.lineTo(path.points[i].x, path.points[i].y);
+                    }
+                    context.stroke();
+                }
             }
+            context.restore();
+        }
+
+        // Vẽ đường cong mượt đi qua các điểm đã kéo (dùng quadratic curve giữa các điểm)
+        function drawSmoothCurve(context, points) {
+            if (points.length === 1) {
+                context.beginPath();
+                context.arc(points[0].x, points[0].y, context.lineWidth / 2, 0, Math.PI * 2);
+                context.fill();
+                return;
+            }
+            if (points.length === 2) {
+                context.beginPath();
+                context.moveTo(points[0].x, points[0].y);
+                context.lineTo(points[1].x, points[1].y);
+                context.stroke();
+                return;
+            }
+            context.beginPath();
+            context.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length - 1; i++) {
+                const midX = (points[i].x + points[i + 1].x) / 2;
+                const midY = (points[i].y + points[i + 1].y) / 2;
+                context.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            }
+            const last = points[points.length - 1];
+            context.lineTo(last.x, last.y);
+            context.stroke();
         }
 
         // ---------- Quản lý file nhiều trang ----------
@@ -1032,6 +1186,68 @@
             } else {
                 prompt('Copy link này:', link);
             }
+        });
+
+        // ---------- Chọn công cụ vẽ: bút / tẩy / đường thẳng / đường cong / đường tròn ----------
+        toolButtons.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                currentTool = this.dataset.tool;
+                toolButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                // Nếu đang có nét dở dang thì hủy để tránh lẫn công cụ
+                drawing = false;
+                currentPath = null;
+                redrawAll();
+            });
+        });
+
+        // ---------- Chế độ toàn màn hình (dành cho điện thoại) ----------
+        function enterFullscreenMode() {
+            document.body.classList.add('fullscreen-mode');
+            toolsPanel.classList.remove('show');
+            const el = document.documentElement;
+            const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+            if (req) {
+                req.call(el).catch(function() { /* một số trình duyệt không hỗ trợ, vẫn dùng giao diện toàn màn hình riêng */ });
+            }
+            setTimeout(resetView, 350);
+        }
+
+        function exitFullscreenMode() {
+            document.body.classList.remove('fullscreen-mode');
+            toolsPanel.classList.remove('show');
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                const exit = document.exitFullscreen || document.webkitExitFullscreen;
+                if (exit) exit.call(document).catch(function() {});
+            }
+            setTimeout(resetView, 350);
+        }
+
+        fullscreenBtn.addEventListener('click', function() {
+            if (document.body.classList.contains('fullscreen-mode')) {
+                exitFullscreenMode();
+            } else {
+                enterFullscreenMode();
+            }
+        });
+
+        exitFullscreenBtn.addEventListener('click', exitFullscreenMode);
+
+        // Nút tròn nổi: khi đang toàn màn hình, nhấn vào để hiện/ẩn bảng công cụ vẽ
+        fabToolsToggle.addEventListener('click', function() {
+            toolsPanel.classList.toggle('show');
+        });
+
+        // Nếu người dùng thoát toàn màn hình bằng nút Back / phím Esc của trình duyệt
+        ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(function(evt) {
+            document.addEventListener(evt, function() {
+                const isBrowserFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+                if (!isBrowserFullscreen && document.body.classList.contains('fullscreen-mode')) {
+                    document.body.classList.remove('fullscreen-mode');
+                    toolsPanel.classList.remove('show');
+                    setTimeout(resetView, 350);
+                }
+            });
         });
 
         // ---------- Guide ----------
