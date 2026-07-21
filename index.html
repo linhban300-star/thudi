@@ -532,6 +532,17 @@
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         }
 
+        function ensureRoomCode() {
+            let code = (roomCodeInput.value || '').trim().toUpperCase();
+            if (!code) {
+                code = restoreRoomCode() || generateRoomCode();
+                roomCodeInput.value = code;
+            }
+            roomCode = code;
+            persistRoomCode(code);
+            return code;
+        }
+
         // Hẹn giờ thử kết nối lại (không thử liên tục dồn dập, có khoảng nghỉ giữa các lần)
         function scheduleReconnect(delayMs) {
             if (manualDisconnect) return;
@@ -543,13 +554,7 @@
         }
 
         function connectPeer() {
-            let code = (roomCodeInput.value || '').trim().toUpperCase();
-            if (!code) {
-                code = restoreRoomCode() || generateRoomCode();
-                roomCodeInput.value = code;
-            }
-            roomCode = code;
-            persistRoomCode(code);
+            const code = ensureRoomCode();
             manualDisconnect = false;
             clearReconnectTimer();
             teardownPeer();
@@ -1705,6 +1710,24 @@
             roomCodeInput.value = initialRoom;
             persistRoomCode(initialRoom);
         }
+
+        window.addEventListener('focus', function() {
+            if (!isConnected && roomCode && !manualDisconnect) {
+                connectPeer();
+            }
+        });
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && !isConnected && roomCode && !manualDisconnect) {
+                connectPeer();
+            }
+        });
+
+        window.addEventListener('online', function() {
+            if (!isConnected && roomCode && !manualDisconnect) {
+                connectPeer();
+            }
+        });
 
         // Fit canvas ban đầu
         setTimeout(() => resetView(), 300);
