@@ -1562,6 +1562,7 @@
                     pctx.drawImage(img, 0, 0, pageData.width, pageData.height);
                     const pagePaths = allPagePaths[idx] || [];
                     for (let p of pagePaths) {
+                        if (p.tool === 'eraser') continue;
                         drawPath(pctx, p);
                     }
                     resolve(pc);
@@ -1584,6 +1585,7 @@
                 pctx.drawImage(bgImage, 0, 0, pc.width, pc.height);
             }
             for (let p of paths) {
+                if (p.tool === 'eraser') continue;
                 drawPath(pctx, p);
             }
             return pc;
