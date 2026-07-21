@@ -1091,7 +1091,7 @@
             for (let path of paths) {
                 drawPath(inkCtx, path);
             }
-            if (currentPath) {
+            if (currentPath && currentPath.tool !== 'eraser') {
                 drawPath(inkCtx, currentPath);
             }
 
@@ -1216,7 +1216,7 @@
 
         function pathIntersectsEraser(path, eraser) {
             if (!path.points || !eraser.points) return false;
-            const threshold = (path.width + eraser.width) / 2 + 10;
+            const threshold = (path.width + eraser.width) / 2 + 16;
             for (let i = 0; i < path.points.length - 1; i++) {
                 const a = path.points[i];
                 const b = path.points[i + 1];
@@ -1235,6 +1235,19 @@
                 for (let i = 0; i < path.points.length; i++) {
                     if (pointDistance(path.points[i], eraser.points[0]) <= threshold) return true;
                 }
+            }
+            return false;
+        }
+
+        function pathIntersectsPoint(path, point, threshold) {
+            if (!path.points || !point) return false;
+            for (let i = 0; i < path.points.length - 1; i++) {
+                const a = path.points[i];
+                const b = path.points[i + 1];
+                if (segmentDistance(a, b, point, point) <= threshold) return true;
+            }
+            for (let i = 0; i < path.points.length; i++) {
+                if (pointDistance(path.points[i], point) <= threshold) return true;
             }
             return false;
         }
@@ -1837,8 +1850,14 @@
 
         // ---------- Init ----------
         // Nếu mở từ link chia sẻ có sẵn ?room=MÃ thì tự điền và tự kết nối
-        restoreStateFromStorage();
-        roomCodeInput.value = generateRoomCode();
+        const urlParams = new URLSearchParams(location.search);
+        const sharedRoom = urlParams.get('room');
+        if (sharedRoom) {
+            roomCodeInput.value = sharedRoom.trim().toUpperCase();
+            setTimeout(() => connectPeer(), 500);
+        } else {
+            roomCodeInput.value = generateRoomCode();
+        }
 
         // Fit canvas ban đầu
         setTimeout(() => resetView(), 300);
