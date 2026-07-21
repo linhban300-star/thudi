@@ -135,19 +135,20 @@
         }
         .file-info i { color: #f0a500; }
 
-        /* Canvas container - scroll */
+        /* Canvas container - custom pan/zoom (không dùng scroll trình duyệt) */
         .canvas-container {
             flex: 1;
             background: #0a0a1a;
             border-radius: 14px;
             border: 1px solid #2a2a5a;
-            overflow: auto;
+            overflow: hidden;
             position: relative;
             min-height: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 10px;
+            touch-action: none;
         }
         .canvas-wrapper {
             position: relative;
@@ -156,7 +157,7 @@
             box-shadow: 0 4px 30px rgba(0,0,0,0.5);
             touch-action: none;
             display: inline-block;
-            transition: transform 0.2s ease;
+            will-change: transform;
         }
         #drawCanvas {
             display: block;
@@ -164,6 +165,12 @@
             cursor: crosshair;
             background: white;
             image-rendering: auto;
+        }
+        .page-indicator {
+            font-size: 0.75rem;
+            min-width: 54px;
+            text-align: center;
+            opacity: 0.9;
         }
 
         /* Tools */
@@ -255,7 +262,14 @@
             <i class="fas fa-file" id="fileIcon"></i>
             <span id="fileName">Chưa có file</span>
         </div>
+        <div class="tool-group" id="pageNavGroup" style="display:none;">
+            <button class="btn" id="prevPageBtn" style="padding:5px 10px;"><i class="fas fa-chevron-left"></i></button>
+            <span class="page-indicator" id="pageIndicator">1/1</span>
+            <button class="btn" id="nextPageBtn" style="padding:5px 10px;"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <button class="btn" id="zoomOutBtn" style="padding:5px 10px;"><i class="fas fa-search-minus"></i></button>
         <button class="btn btn-success" id="zoomFitBtn"><i class="fas fa-expand"></i> Vừa khung</button>
+        <button class="btn" id="zoomInBtn" style="padding:5px 10px;"><i class="fas fa-search-plus"></i></button>
     </div>
 
     <!-- Canvas container -->
@@ -294,7 +308,7 @@
         <li><strong>Lưu ý:</strong> Hoạt động cả khi 2 máy khác mạng WiFi/4G, không cần cùng mạng</li>
     </ul>
     <div style="margin-top:10px; font-size:0.7rem; opacity:0.6;">
-        <i class="fas fa-info-circle"></i> Đóng file Word/PDF khi mở sẽ hiển thị toàn bộ nội dung, cuộn để xem hết
+        <i class="fas fa-info-circle"></i> File nhiều trang: dùng nút ◀ ▶ để chuyển trang. Trên điện thoại: 1 ngón để vẽ, 2 ngón để phóng to/thu nhỏ và di chuyển xem trang
     </div>
 </div>
 
@@ -323,6 +337,12 @@
         const clearCanvasBtn = document.getElementById('clearCanvasBtn');
         const clearFileBtn = document.getElementById('clearFileBtn');
         const zoomFitBtn = document.getElementById('zoomFitBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const pageNavGroup = document.getElementById('pageNavGroup');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const pageIndicator = document.getElementById('pageIndicator');
 
         const imageInput = document.getElementById('imageInput');
         const pdfInput = document.getElementById('pdfInput');
@@ -339,11 +359,20 @@
         let drawing = false;
         let currentColor = '#e74c3c';
         let currentWidth = 6;
-        let paths = [];
+        let paths = [];          // nét vẽ của TRANG hiện tại (tham chiếu tới allPagePaths[currentPageIndex])
         let currentPath = null;
-        let undoStack = [];
-        let bgImage = null;
-        let bgImageData = null; // lưu dataURL để đồng bộ
+        let bgImage = null;      // ảnh (Image object) của trang đang hiển thị
+
+        // Tài liệu nhiều trang: mỗi file (ảnh/PDF/Word) là 1 danh sách trang
+        let fileState = null;    // { name, type, pages: [{dataURL, width, height}, ...] }
+        let currentPageIndex = 0;
+        let allPagePaths = [];   // mảng song song với fileState.pages, mỗi phần tử là mảng path của trang đó
+
+        // Trạng thái xem: phóng to/thu nhỏ + di chuyển (pan) bằng cử chỉ, không dùng scroll trình duyệt
+        let viewScale = 1;
+        let viewX = 0;
+        let viewY = 0;
+        let pinch = null; // theo dõi cử chỉ 2 ngón (zoom + pan)
 
         // ---------- PeerJS: kết nối thật giữa 2 thiết bị ----------
         function generateRoomCode() {
@@ -417,21 +446,30 @@
         function handleIncoming(data) {
             if (!data || !data.type) return;
             if (data.type === 'draw' && data.path) {
-                paths.push(data.path);
-                redrawAll();
+                const idx = (data.pageIndex !== undefined) ? data.pageIndex : currentPageIndex;
+                if (!allPagePaths[idx]) allPagePaths[idx] = [];
+                allPagePaths[idx].push(data.path);
+                if (idx === currentPageIndex) { paths = allPagePaths[idx]; redrawAll(); }
             } else if (data.type === 'clear') {
-                paths = [];
-                redrawAll();
+                const idx = (data.pageIndex !== undefined) ? data.pageIndex : currentPageIndex;
+                allPagePaths[idx] = [];
+                if (idx === currentPageIndex) { paths = allPagePaths[idx]; redrawAll(); }
             } else if (data.type === 'undo') {
-                if (paths.length > 0) paths.pop();
-                redrawAll();
-            } else if (data.type === 'file' && data.dataURL) {
-                loadImageFromDataURL(data.dataURL, data.fileName, data.fileType, false);
+                const idx = (data.pageIndex !== undefined) ? data.pageIndex : currentPageIndex;
+                if (allPagePaths[idx] && allPagePaths[idx].length > 0) allPagePaths[idx].pop();
+                if (idx === currentPageIndex) { paths = allPagePaths[idx]; redrawAll(); }
+            } else if (data.type === 'file' && data.pages) {
+                loadFileWithPages(data.pages, data.fileName, data.fileType, true);
+            } else if (data.type === 'page') {
+                showPage(data.pageIndex);
             } else if (data.type === 'state') {
-                paths = data.paths || [];
-                if (data.bgImageData) {
-                    loadImageFromDataURL(data.bgImageData, data.fileNameVal || 'file', data.fileType || 'image', false);
+                allPagePaths = data.allPagePaths || [];
+                if (data.fileState) {
+                    fileState = data.fileState;
+                    showPage(data.currentPageIndex || 0);
                 } else {
+                    fileState = null;
+                    paths = allPagePaths[0] || [];
                     redrawAll();
                 }
             }
@@ -450,31 +488,34 @@
         }
 
         function sendDrawData(path) {
-            if (conn && conn.open) conn.send({ type: 'draw', path: path });
+            if (conn && conn.open) conn.send({ type: 'draw', path: path, pageIndex: currentPageIndex });
         }
 
         function sendClearData() {
-            if (conn && conn.open) conn.send({ type: 'clear' });
+            if (conn && conn.open) conn.send({ type: 'clear', pageIndex: currentPageIndex });
         }
 
         function sendUndoData() {
-            if (conn && conn.open) conn.send({ type: 'undo' });
+            if (conn && conn.open) conn.send({ type: 'undo', pageIndex: currentPageIndex });
         }
 
-        function sendFileData(dataURL, name, type) {
+        function sendFileWithPages(pagesArray, name, type) {
             if (conn && conn.open) {
-                conn.send({ type: 'file', dataURL: dataURL, fileName: name, fileType: type });
+                conn.send({ type: 'file', pages: pagesArray, fileName: name, fileType: type });
             }
+        }
+
+        function sendPageChange(idx) {
+            if (conn && conn.open) conn.send({ type: 'page', pageIndex: idx });
         }
 
         function sendFullState() {
             if (conn && conn.open) {
                 conn.send({
                     type: 'state',
-                    paths: paths,
-                    bgImageData: bgImageData,
-                    fileNameVal: fileName.textContent,
-                    fileType: fileIcon.dataset.type || 'image'
+                    fileState: fileState,
+                    allPagePaths: allPagePaths,
+                    currentPageIndex: currentPageIndex
                 });
             }
         }
@@ -493,7 +534,6 @@
             if (e.touches) {
                 cx = e.touches[0].clientX;
                 cy = e.touches[0].clientY;
-                e.preventDefault();
             } else {
                 cx = e.clientX;
                 cy = e.clientY;
@@ -533,7 +573,6 @@
                 if (currentPath.points.length > 0) {
                     const pathCopy = { ...currentPath, points: [...currentPath.points] };
                     paths.push(pathCopy);
-                    undoStack.push({ type: 'path', path: pathCopy });
                     sendDrawData(pathCopy);
                 }
                 currentPath = null;
@@ -545,15 +584,96 @@
             }
         }
 
+        // ---------- Xem: phóng to/thu nhỏ + di chuyển bằng cử chỉ ----------
+        function applyTransform(smooth) {
+            wrapper.style.transition = smooth ? 'transform 0.2s ease' : 'none';
+            wrapper.style.transform = 'translate(' + viewX + 'px, ' + viewY + 'px) scale(' + viewScale + ')';
+        }
+
+        function resetView() {
+            const containerRect = container.getBoundingClientRect();
+            const pad = 20;
+            const availW = containerRect.width - pad * 2;
+            const availH = containerRect.height - pad * 2;
+            const scaleX = availW / canvas.width;
+            const scaleY = availH / canvas.height;
+            let scale = Math.min(scaleX, scaleY, 3);
+            if (!isFinite(scale) || scale <= 0) scale = 1;
+            viewScale = scale;
+            viewX = 0;
+            viewY = 0;
+            applyTransform(true);
+        }
+
+        function zoomBy(factor) {
+            viewScale = Math.min(Math.max(viewScale * factor, 0.15), 6);
+            applyTransform(true);
+        }
+
+        function touchDistance(t0, t1) {
+            const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+            return Math.hypot(dx, dy);
+        }
+        function touchMidpoint(t0, t1) {
+            return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+        }
+
+        // 1 ngón = vẽ. 2 ngón = phóng to/thu nhỏ + di chuyển xem (không vẽ).
+        function handleTouchStart(e) {
+            if (e.touches.length >= 2) {
+                e.preventDefault();
+                if (drawing) { drawing = false; currentPath = null; redrawAll(); }
+                const t0 = e.touches[0], t1 = e.touches[1];
+                pinch = {
+                    startDist: touchDistance(t0, t1),
+                    startScale: viewScale,
+                    startMid: touchMidpoint(t0, t1),
+                    startViewX: viewX,
+                    startViewY: viewY
+                };
+                return;
+            }
+            pinch = null;
+            startDrawing(e);
+        }
+
+        function handleTouchMove(e) {
+            if (pinch && e.touches.length >= 2) {
+                e.preventDefault();
+                const t0 = e.touches[0], t1 = e.touches[1];
+                const dist = touchDistance(t0, t1);
+                const mid = touchMidpoint(t0, t1);
+                let newScale = pinch.startScale * (dist / pinch.startDist);
+                newScale = Math.min(Math.max(newScale, 0.15), 6);
+                viewScale = newScale;
+                viewX = pinch.startViewX + (mid.x - pinch.startMid.x);
+                viewY = pinch.startViewY + (mid.y - pinch.startMid.y);
+                applyTransform(false);
+                return;
+            }
+            if (!pinch) draw(e);
+        }
+
+        function handleTouchEnd(e) {
+            if (e.touches.length < 2) pinch = null;
+            if (e.touches.length === 0) stopDrawing(e);
+        }
+
         // Events
         canvas.addEventListener('mousedown', startDrawing);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseup', stopDrawing);
         canvas.addEventListener('mouseleave', stopDrawing);
-        canvas.addEventListener('touchstart', startDrawing, { passive: false });
-        canvas.addEventListener('touchmove', draw, { passive: false });
-        canvas.addEventListener('touchend', stopDrawing, { passive: false });
-        canvas.addEventListener('touchcancel', stopDrawing, { passive: false });
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+        // Chuột: lăn để phóng to/thu nhỏ (máy tính)
+        container.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            zoomBy(e.deltaY < 0 ? 1.1 : 0.9);
+        }, { passive: false });
 
         // ---------- Redraw ----------
         function redrawAll() {
@@ -589,49 +709,75 @@
             }
         }
 
-        // ---------- Load image ----------
-        function loadImageFromDataURL(dataURL, name, type, resetPaths) {
+        // ---------- Quản lý file nhiều trang ----------
+        function iconForType(type) {
+            const iconMap = { 'image': 'fa-image', 'pdf': 'fa-file-pdf', 'word': 'fa-file-word' };
+            return iconMap[type] || 'fa-file';
+        }
+
+        function updatePageIndicator() {
+            if (!fileState || !fileState.pages || fileState.pages.length <= 1) {
+                pageNavGroup.style.display = 'none';
+                return;
+            }
+            pageNavGroup.style.display = 'flex';
+            pageIndicator.textContent = (currentPageIndex + 1) + '/' + fileState.pages.length;
+            prevPageBtn.disabled = currentPageIndex === 0;
+            nextPageBtn.disabled = currentPageIndex === fileState.pages.length - 1;
+        }
+
+        // Nạp 1 file gồm nhiều trang. resetPaths=true khi đây là file MỚI (xóa nét vẽ cũ vì không còn khớp nội dung)
+        function loadFileWithPages(pagesArray, name, type, resetPaths) {
             if (resetPaths === undefined) resetPaths = true;
+            fileState = { name: name, type: type, pages: pagesArray };
+            if (resetPaths || !allPagePaths || allPagePaths.length !== pagesArray.length) {
+                allPagePaths = pagesArray.map(() => []);
+            }
+            fileName.textContent = name;
+            fileIcon.className = 'fas ' + iconForType(type);
+            showPage(0, true);
+        }
+
+        // Hiển thị 1 trang cụ thể của file đang mở
+        function showPage(idx, resetViewAfter) {
+            if (!fileState || !fileState.pages[idx]) return;
+            currentPageIndex = idx;
+            const pageData = fileState.pages[idx];
             const img = new Image();
             img.onload = function() {
                 bgImage = img;
-                bgImageData = dataURL;
-                fileName.textContent = name;
-                const iconMap = {
-                    'image': 'fa-image',
-                    'pdf': 'fa-file-pdf',
-                    'word': 'fa-file-word'
-                };
-                fileIcon.className = 'fas ' + (iconMap[type] || 'fa-file');
-                fileIcon.dataset.type = type || 'image';
+                canvas.width = pageData.width;
+                canvas.height = pageData.height;
+                paths = allPagePaths[idx] || (allPagePaths[idx] = []);
+                currentPath = null;
+                drawing = false;
+                redrawAll();
+                resetView();
+                updatePageIndicator();
+            };
+            img.onerror = function() {
+                alert('Không thể hiển thị trang. Vui lòng thử lại.');
+            };
+            img.src = pageData.dataURL;
+        }
 
-                // Giãn canvas đúng kích thước thật của nội dung để xem TOÀN BỘ,
-                // không bóp méo/cắt vào khung 1200x800 cố định như trước.
-                const maxDim = 8000; // giới hạn an toàn cho bộ nhớ trình duyệt
+        // Nạp 1 ảnh đơn (file "Ảnh") — coi như tài liệu 1 trang
+        function loadSingleImageFile(dataURL, name, type) {
+            const img = new Image();
+            img.onload = function() {
+                const maxDim = 4000;
                 let w = img.naturalWidth, h = img.naturalHeight;
                 if (w > maxDim || h > maxDim) {
                     const ratio = Math.min(maxDim / w, maxDim / h);
                     w = Math.round(w * ratio);
                     h = Math.round(h * ratio);
                 }
-                canvas.width = w;
-                canvas.height = h;
-
-                if (resetPaths) {
-                    // File mới do chính máy này chọn hoặc máy kia vừa đổi file
-                    // -> canvas mới, xóa nét vẽ cũ vì tọa độ không còn khớp
-                    paths = [];
-                    undoStack = [];
-                    currentPath = null;
-                }
-                // Nếu resetPaths=false (đang đồng bộ trạng thái lúc mới ghép nối),
-                // giữ nguyên paths đã được gán từ dữ liệu đồng bộ.
-
-                redrawAll();
-                setTimeout(() => zoomFitBtn.click(), 200);
+                const pages = [{ dataURL: dataURL, width: w, height: h }];
+                loadFileWithPages(pages, name, type, true);
+                sendFileWithPages(pages, name, type);
             };
             img.onerror = function() {
-                alert('Không thể tải file. Vui lòng thử lại.');
+                alert('Không thể tải ảnh. Vui lòng thử lại.');
             };
             img.src = dataURL;
         }
@@ -651,50 +797,29 @@
                         pagePromises.push(pdf.getPage(i));
                     }
                     Promise.all(pagePromises).then(function(pages) {
-                        const viewports = pages.map(p => p.getViewport({ scale: scale }));
-                        const gap = 16;
-                        const maxWidth = Math.max(...viewports.map(v => v.width));
-                        const totalHeight = viewports.reduce((sum, v) => sum + v.height, 0) + gap * (pages.length - 1);
-
-                        const masterCanvas = document.createElement('canvas');
-                        masterCanvas.width = Math.round(maxWidth);
-                        masterCanvas.height = Math.round(totalHeight);
-                        const mctx = masterCanvas.getContext('2d');
-                        mctx.fillStyle = '#ffffff';
-                        mctx.fillRect(0, 0, masterCanvas.width, masterCanvas.height);
-
-                        // Render lần lượt từng trang rồi ghép dọc thành 1 ảnh dài (đủ mọi trang)
+                        const pagesData = [];
                         let chain = Promise.resolve();
-                        let yOffset = 0;
-                        pages.forEach(function(page, idx) {
+                        pages.forEach(function(page) {
                             chain = chain.then(function() {
-                                const viewport = viewports[idx];
+                                const viewport = page.getViewport({ scale: scale });
                                 const tempCanvas = document.createElement('canvas');
-                                tempCanvas.width = viewport.width;
-                                tempCanvas.height = viewport.height;
+                                tempCanvas.width = Math.round(viewport.width);
+                                tempCanvas.height = Math.round(viewport.height);
                                 const tctx = tempCanvas.getContext('2d');
                                 tctx.imageSmoothingEnabled = true;
                                 tctx.imageSmoothingQuality = 'high';
                                 return page.render({ canvasContext: tctx, viewport: viewport }).promise.then(function() {
-                                    const xOffset = Math.round((maxWidth - viewport.width) / 2);
-                                    mctx.drawImage(tempCanvas, xOffset, Math.round(yOffset));
-                                    yOffset += viewport.height;
-                                    if (idx < pages.length - 1) {
-                                        mctx.strokeStyle = '#ddd';
-                                        mctx.beginPath();
-                                        mctx.moveTo(0, Math.round(yOffset) + gap / 2);
-                                        mctx.lineTo(masterCanvas.width, Math.round(yOffset) + gap / 2);
-                                        mctx.stroke();
-                                        yOffset += gap;
-                                    }
+                                    pagesData.push({
+                                        dataURL: tempCanvas.toDataURL('image/png'),
+                                        width: tempCanvas.width,
+                                        height: tempCanvas.height
+                                    });
                                 });
                             });
                         });
-
                         chain.then(function() {
-                            const dataURL = masterCanvas.toDataURL('image/png');
-                            loadImageFromDataURL(dataURL, file.name + ' (' + pages.length + ' trang)', 'pdf');
-                            sendFileData(dataURL, file.name + ' (' + pages.length + ' trang)', 'pdf');
+                            loadFileWithPages(pagesData, file.name, 'pdf', true);
+                            sendFileWithPages(pagesData, file.name, 'pdf');
                         });
                     });
                 }).catch(function(err) {
@@ -757,9 +882,9 @@
             setTimeout(function() {
                 html2canvas(holder, { backgroundColor: '#ffffff', scale: 2, useCORS: true }).then(function(renderedCanvas) {
                     document.body.removeChild(holder);
-                    const dataURL = renderedCanvas.toDataURL('image/png');
-                    loadImageFromDataURL(dataURL, fileNameStr, 'word');
-                    sendFileData(dataURL, fileNameStr, 'word');
+                    const pages = sliceCanvasIntoPages(renderedCanvas);
+                    loadFileWithPages(pages, fileNameStr, 'word', true);
+                    sendFileWithPages(pages, fileNameStr, 'word');
                 }).catch(function(err) {
                     document.body.removeChild(holder);
                     alert('Lỗi khi hiển thị nội dung Word: ' + err.message);
@@ -767,14 +892,34 @@
             }, 300);
         }
 
+        // Cắt 1 ảnh dài (toàn bộ nội dung Word) thành nhiều trang cỡ A4 để xem từng trang, lướt được
+        function sliceCanvasIntoPages(sourceCanvas) {
+            const pageWidth = sourceCanvas.width;
+            const pageHeight = Math.round(pageWidth * 1.4142); // tỉ lệ A4
+            const totalHeight = sourceCanvas.height;
+            const numPages = Math.max(1, Math.ceil(totalHeight / pageHeight));
+            const pages = [];
+            for (let i = 0; i < numPages; i++) {
+                const sy = i * pageHeight;
+                const sh = Math.min(pageHeight, totalHeight - sy);
+                const pc = document.createElement('canvas');
+                pc.width = pageWidth;
+                pc.height = pageHeight;
+                const pctx = pc.getContext('2d');
+                pctx.fillStyle = '#ffffff';
+                pctx.fillRect(0, 0, pageWidth, pageHeight);
+                pctx.drawImage(sourceCanvas, 0, sy, pageWidth, sh, 0, 0, pageWidth, sh);
+                pages.push({ dataURL: pc.toDataURL('image/png'), width: pageWidth, height: pageHeight });
+            }
+            return pages;
+        }
+
         // ---------- File events ----------
         imageInput.addEventListener('change', function(e) {
             if (this.files && this.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    const dataURL = e.target.result;
-                    loadImageFromDataURL(dataURL, imageInput.files[0].name, 'image');
-                    sendFileData(dataURL, imageInput.files[0].name, 'image');
+                    loadSingleImageFile(e.target.result, imageInput.files[0].name, 'image');
                 };
                 reader.readAsDataURL(this.files[0]);
             }
@@ -796,11 +941,19 @@
         });
 
         clearFileBtn.addEventListener('click', function() {
+            fileState = null;
+            allPagePaths = [];
+            paths = [];
+            currentPath = null;
             bgImage = null;
-            bgImageData = null;
+            currentPageIndex = 0;
             fileName.textContent = 'Chưa có file';
             fileIcon.className = 'fas fa-file';
+            canvas.width = 1200;
+            canvas.height = 800;
+            updatePageIndicator();
             redrawAll();
+            resetView();
         });
 
         // ---------- Tools ----------
@@ -815,32 +968,41 @@
         undoBtn.addEventListener('click', function() {
             if (paths.length === 0) return;
             paths.pop();
-            if (undoStack.length) undoStack.pop();
             sendUndoData();
             redrawAll();
         });
 
         clearCanvasBtn.addEventListener('click', function() {
-            paths = [];
-            undoStack = [];
+            paths.length = 0;
             currentPath = null;
             drawing = false;
             sendClearData();
             redrawAll();
         });
 
-        // ---------- Zoom fit ----------
+        // ---------- Zoom & di chuyển ----------
         zoomFitBtn.addEventListener('click', function() {
-            const containerRect = container.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
-            const pad = 20;
-            const availW = containerRect.width - pad * 2;
-            const availH = containerRect.height - pad * 2;
-            const scaleX = availW / canvasRect.width;
-            const scaleY = availH / canvasRect.height;
-            const scale = Math.min(scaleX, scaleY, 2.5);
-            wrapper.style.transform = `scale(${scale})`;
-            wrapper.style.transformOrigin = 'center center';
+            resetView();
+        });
+        zoomInBtn.addEventListener('click', function() {
+            zoomBy(1.25);
+        });
+        zoomOutBtn.addEventListener('click', function() {
+            zoomBy(0.8);
+        });
+
+        // ---------- Chuyển trang ----------
+        prevPageBtn.addEventListener('click', function() {
+            if (!fileState || currentPageIndex <= 0) return;
+            const idx = currentPageIndex - 1;
+            showPage(idx);
+            sendPageChange(idx);
+        });
+        nextPageBtn.addEventListener('click', function() {
+            if (!fileState || currentPageIndex >= fileState.pages.length - 1) return;
+            const idx = currentPageIndex + 1;
+            showPage(idx);
+            sendPageChange(idx);
         });
 
         // ---------- Connection ----------
@@ -897,13 +1059,13 @@
         }
 
         // Fit canvas ban đầu
-        setTimeout(() => zoomFitBtn.click(), 800);
+        setTimeout(() => resetView(), 300);
 
         // Resize
         let resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => zoomFitBtn.click(), 300);
+            resizeTimer = setTimeout(() => resetView(), 300);
         });
 
         console.log('🖌️ Bảng vẽ từ xa đã sẵn sàng!');
