@@ -494,16 +494,70 @@
 
         // ---------- PeerJS: kết nối thật giữa 2 thiết bị ----------
         function generateRoomCode() {
-            return Math.random().toString(36).substring(2, 8).toUpperCase();
+            return DEFAULT_ROOM_CODE;
         }
 
         // true = người dùng chủ động bấm "Ngắt" -> KHÔNG tự kết nối lại
         // false = mất kết nối ngoài ý muốn (mất mạng, out app...) -> tự động thử kết nối lại
         let manualDisconnect = true;
         let reconnectTimer = null;
+        const DEFAULT_ROOM_CODE = 'WBROOM';
 
         function clearReconnectTimer() {
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        }
+
+        function saveStateToStorage() {
+            const state = {
+                fileState: fileState,
+                allPagePaths: allPagePaths,
+                currentPageIndex: currentPageIndex,
+                blankBoard: fileState ? null : {
+                    width: canvas.width,
+                    height: canvas.height,
+                    paths: paths
+                }
+            };
+            try {
+                localStorage.setItem('wbAppState', JSON.stringify(state));
+            } catch (e) {
+                console.warn('Không thể lưu trạng thái vào localStorage.', e);
+            }
+        }
+
+        function restoreStateFromStorage() {
+            try {
+                const raw = localStorage.getItem('wbAppState');
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved && saved.fileState && saved.fileState.pages) {
+                    fileState = saved.fileState;
+                    allPagePaths = Array.isArray(saved.allPagePaths) ? saved.allPagePaths : [];
+                    currentPageIndex = Math.min(saved.currentPageIndex || 0, fileState.pages.length - 1);
+                    if (!allPagePaths || allPagePaths.length !== fileState.pages.length) {
+                        allPagePaths = fileState.pages.map((_, idx) => (saved.allPagePaths && saved.allPagePaths[idx]) ? saved.allPagePaths[idx] : []);
+                    }
+                    loadFileWithPages(fileState.pages, fileState.name, fileState.type, false);
+                    showPage(currentPageIndex, true);
+                } else if (saved && saved.blankBoard) {
+                    fileState = null;
+                    allPagePaths = [];
+                    paths = Array.isArray(saved.blankBoard.paths) ? saved.blankBoard.paths : [];
+                    canvas.width = saved.blankBoard.width || 1200;
+                    canvas.height = saved.blankBoard.height || 800;
+                    inkCanvas.width = canvas.width;
+                    inkCanvas.height = canvas.height;
+                    bgImage = null;
+                    currentPageIndex = 0;
+                    fileName.textContent = 'Chưa có file';
+                    fileIcon.className = 'fas fa-file';
+                    redrawAll();
+                    resetView();
+                    updatePageIndicator();
+                }
+            } catch (e) {
+                console.warn('Không thể khôi phục trạng thái từ localStorage.', e);
+            }
         }
 
         // Hẹn giờ thử kết nối lại (không thử liên tục dồn dập, có khoảng nghỉ giữa các lần)
@@ -517,11 +571,8 @@
         }
 
         function connectPeer() {
-            let code = (roomCodeInput.value || '').trim().toUpperCase();
-            if (!code) {
-                code = generateRoomCode();
-                roomCodeInput.value = code;
-            }
+            const code = DEFAULT_ROOM_CODE;
+            roomCodeInput.value = code;
             roomCode = code;
             manualDisconnect = false;
             clearReconnectTimer();
@@ -668,6 +719,10 @@
         function requestStateSync() {
             if (conn && conn.open) conn.send({ type: 'requestState' });
         }
+
+        window.addEventListener('beforeunload', function() {
+            saveStateToStorage();
+        });
 
         function handleIncoming(data) {
             if (!data || !data.type) return;
@@ -839,6 +894,7 @@
                     const pathCopy = { ...currentPath, points: [...currentPath.points] };
                     paths.push(pathCopy);
                     if (conn && conn.open) sendDrawData(pathCopy);
+                    saveStateToStorage();
                 }
                 currentPath = null;
                 drawing = false;
@@ -1120,6 +1176,7 @@
             fileName.textContent = name;
             fileIcon.className = 'fas ' + iconForType(type);
             showPage(0, true);
+            saveStateToStorage();
         }
 
         // Hiển thị 1 trang cụ thể của file đang mở
@@ -1140,6 +1197,7 @@
                 redrawAll();
                 resetView();
                 updatePageIndicator();
+                saveStateToStorage();
             };
             img.onerror = function() {
                 alert('Không thể hiển thị trang. Vui lòng thử lại.');
@@ -1342,6 +1400,7 @@
             updatePageIndicator();
             redrawAll();
             resetView();
+            saveStateToStorage();
         });
 
         // ---------- Tools ----------
@@ -1358,6 +1417,7 @@
             paths.pop();
             sendUndoData();
             redrawAll();
+            saveStateToStorage();
         });
 
         clearCanvasBtn.addEventListener('click', function() {
@@ -1366,6 +1426,7 @@
             drawing = false;
             sendClearData();
             redrawAll();
+            saveStateToStorage();
         });
 
         // ---------- Lưu file về máy: PDF hoặc Word (ĐẦY ĐỦ TẤT CẢ CÁC TRANG) ----------
@@ -1570,11 +1631,8 @@
         });
 
         copyLinkBtn.addEventListener('click', function() {
-            let code = (roomCodeInput.value || '').trim().toUpperCase();
-            if (!code) {
-                code = generateRoomCode();
-                roomCodeInput.value = code;
-            }
+            const code = DEFAULT_ROOM_CODE;
+            roomCodeInput.value = code;
             const link = location.origin + location.pathname + '?room=' + code;
             const done = function() {
                 const old = statusText.textContent;
@@ -1669,14 +1727,8 @@
 
         // ---------- Init ----------
         // Nếu mở từ link chia sẻ có sẵn ?room=MÃ thì tự điền và tự kết nối
-        const urlParams = new URLSearchParams(location.search);
-        const sharedRoom = urlParams.get('room');
-        if (sharedRoom) {
-            roomCodeInput.value = sharedRoom.trim().toUpperCase();
-            setTimeout(() => connectPeer(), 500);
-        } else {
-            roomCodeInput.value = generateRoomCode();
-        }
+        restoreStateFromStorage();
+        roomCodeInput.value = generateRoomCode();
 
         // Fit canvas ban đầu
         setTimeout(() => resetView(), 300);
