@@ -497,6 +497,25 @@
             return Math.random().toString(36).substring(2, 8).toUpperCase();
         }
 
+        // true = người dùng chủ động bấm "Ngắt" -> KHÔNG tự kết nối lại
+        // false = mất kết nối ngoài ý muốn (mất mạng, out app...) -> tự động thử kết nối lại
+        let manualDisconnect = true;
+        let reconnectTimer = null;
+
+        function clearReconnectTimer() {
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        }
+
+        // Hẹn giờ thử kết nối lại (không thử liên tục dồn dập, có khoảng nghỉ giữa các lần)
+        function scheduleReconnect(delayMs) {
+            if (manualDisconnect) return;
+            clearReconnectTimer();
+            reconnectTimer = setTimeout(function() {
+                reconnectTimer = null;
+                if (!manualDisconnect && !isConnected) attemptReconnect();
+            }, delayMs || 2500);
+        }
+
         function connectPeer() {
             let code = (roomCodeInput.value || '').trim().toUpperCase();
             if (!code) {
@@ -504,6 +523,8 @@
                 roomCodeInput.value = code;
             }
             roomCode = code;
+            manualDisconnect = false;
+            clearReconnectTimer();
             teardownPeer();
             statusText.textContent = '⏳ Đang kết nối...';
 
@@ -520,32 +541,96 @@
                 wireConnection();
             });
 
+            // Nếu tuột kết nối tới máy chủ tín hiệu (không phải bị đối phương ngắt) -> tự nối lại, giữ nguyên vai trò + nội dung
+            peer.on('disconnected', function() {
+                if (!manualDisconnect) {
+                    try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
+                }
+            });
+
             peer.on('error', function(err) {
                 if (err.type === 'unavailable-id') {
                     // Đã có host dùng mã này -> tự làm client và nối vào
                     if (peer) peer.destroy();
                     isHost = false;
-                    peer = new Peer(undefined, { debug: 0 });
-                    peer.on('open', function() {
-                        conn = peer.connect('wb-' + code, { reliable: true });
-                        conn.on('open', wireConnection);
-                        conn.on('error', function() {
-                            statusText.textContent = '❌ Không thể kết nối tới phòng';
-                            setConnection(false);
-                        });
-                    });
-                    peer.on('error', function() {
-                        statusText.textContent = '❌ Lỗi kết nối';
-                        setConnection(false);
-                    });
+                    startClientPeer(code);
                 } else {
                     statusText.textContent = '❌ Lỗi: ' + err.type;
                     setConnection(false);
+                    if (!manualDisconnect) scheduleReconnect(3000);
                 }
             });
         }
 
+        // Tạo peer đóng vai "client" và nối vào phòng theo mã code
+        function startClientPeer(code) {
+            peer = new Peer(undefined, { debug: 0 });
+            peer.on('open', function() {
+                tryClientConnect(code);
+            });
+            peer.on('disconnected', function() {
+                if (!manualDisconnect) {
+                    try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
+                }
+            });
+            peer.on('error', function() {
+                statusText.textContent = '❌ Lỗi kết nối';
+                setConnection(false);
+                if (!manualDisconnect) scheduleReconnect(3000);
+            });
+        }
+
+        function tryClientConnect(code) {
+            if (manualDisconnect || !peer) return;
+            conn = peer.connect('wb-' + code, { reliable: true });
+            conn.on('open', wireConnection);
+            conn.on('error', function() {
+                statusText.textContent = '❌ Không thể kết nối tới phòng';
+                setConnection(false);
+                if (!manualDisconnect) scheduleReconnect(3000);
+            });
+        }
+
+        // Tự động thử kết nối lại sau khi bị rớt ngoài ý muốn — GIỮ NGUYÊN vai trò (host/client) và toàn bộ nội dung đã có
+        function attemptReconnect() {
+            if (manualDisconnect || isConnected || !roomCode) return;
+            statusText.textContent = '🔄 Đang tự động kết nối lại...';
+            if (isHost) {
+                if (peer && !peer.destroyed) {
+                    // Peer vẫn còn sống -> chỉ cần chờ thiết bị kia nối lại (đã có sẵn listener 'connection')
+                    if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} }
+                    statusText.textContent = '📡 Phòng ' + roomCode + ' — chờ thiết bị kia nối lại...';
+                } else {
+                    // Peer đã chết hẳn -> mở lại làm host với đúng mã phòng cũ
+                    peer = new Peer('wb-' + roomCode, { debug: 0 });
+                    peer.on('open', function() {
+                        isHost = true;
+                        statusText.textContent = '📡 Phòng ' + roomCode + ' — chờ thiết bị kia nối lại...';
+                    });
+                    peer.on('connection', function(c) { conn = c; wireConnection(); });
+                    peer.on('disconnected', function() {
+                        if (!manualDisconnect) { try { peer.reconnect(); } catch (e) {} }
+                    });
+                    peer.on('error', function() { scheduleReconnect(3000); });
+                }
+            } else {
+                if (peer && !peer.destroyed) {
+                    if (peer.disconnected) {
+                        try { peer.reconnect(); } catch (e) {}
+                        peer.once('open', function() { tryClientConnect(roomCode); });
+                    } else {
+                        tryClientConnect(roomCode);
+                    }
+                } else {
+                    startClientPeer(roomCode);
+                }
+            }
+            // Đảm bảo vẫn còn 1 lượt thử tiếp theo phòng khi lượt này chưa thành công
+            scheduleReconnect(4000);
+        }
+
         function wireConnection() {
+            clearReconnectTimer();
             setConnection(true);
             statusText.textContent = '✅ Đã kết nối 2 thiết bị (' + roomCode + ')';
             conn.on('data', function(data) {
@@ -553,12 +638,35 @@
             });
             conn.on('close', function() {
                 setConnection(false);
-                statusText.textContent = '⛔ Thiết bị kia đã ngắt';
+                if (manualDisconnect) {
+                    statusText.textContent = '⛔ Đã ngắt';
+                } else {
+                    // Thiết bị kia bị out nhưng nội dung ở đây (file + nét vẽ) vẫn được giữ nguyên,
+                    // tự động thử kết nối lại — khi nối lại thành công sẽ hiển thị nội dung ngay lập tức
+                    statusText.textContent = '🔄 Thiết bị kia bị mất kết nối — đang tự động nối lại...';
+                    scheduleReconnect(1500);
+                }
+            });
+            conn.on('error', function() {
+                setConnection(false);
+                if (!manualDisconnect) {
+                    statusText.textContent = '🔄 Mất kết nối — đang tự động nối lại...';
+                    scheduleReconnect(1500);
+                }
             });
             // Nếu là host, gửi luôn trạng thái hiện tại (nét vẽ + file) cho máy vừa nối vào
+            // -> thiết bị vừa kết nối lại (dù là host hay client) đều thấy nội dung hiện ra NGAY LẬP TỨC
             if (isHost) {
                 sendFullState();
+            } else {
+                // Client cũng chủ động xin lại trạng thái mới nhất từ host để chắc chắn không bị thiếu nội dung
+                requestStateSync();
             }
+        }
+
+        // Client yêu cầu host gửi lại toàn bộ trạng thái (dùng khi vừa nối lại sau khi bị rớt)
+        function requestStateSync() {
+            if (conn && conn.open) conn.send({ type: 'requestState' });
         }
 
         function handleIncoming(data) {
@@ -596,6 +704,9 @@
                 if (data.pageIndex === undefined || data.pageIndex === currentPageIndex) {
                     applyRemoteView(data);
                 }
+            } else if (data.type === 'requestState') {
+                // Thiết bị kia (client) vừa kết nối lại và xin đồng bộ lại toàn bộ nội dung
+                if (isHost) sendFullState();
             }
         }
 
@@ -606,6 +717,8 @@
         }
 
         function disconnectPeer() {
+            manualDisconnect = true;
+            clearReconnectTimer();
             teardownPeer();
             setConnection(false);
             statusText.textContent = '⛔ Đã ngắt';
