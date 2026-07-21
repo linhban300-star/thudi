@@ -469,6 +469,7 @@
 
         // ---------- State ----------
         let isConnected = false;
+        let peer = null;
         let peerConnection = null;
         let conn = null;
         let isHost = false;
@@ -555,15 +556,20 @@
         }
 
         function connectPeer() {
-            const code = ensureRoomCode();
-            manualDisconnect = false;
-            clearReconnectTimer();
-            clearConnectAttemptTimer();
-            teardownPeer();
-            statusText.textContent = '⏳ Đang kết nối...';
+            if (typeof Peer === 'undefined') {
+                statusText.textContent = '⚠️ Không tải được thư viện kết nối';
+                return;
+            }
+            try {
+                const code = ensureRoomCode();
+                manualDisconnect = false;
+                clearReconnectTimer();
+                clearConnectAttemptTimer();
+                teardownPeer();
+                statusText.textContent = '⏳ Đang kết nối...';
 
-            // Thử làm client trước rồi nếu không kết nối được thì chuyển sang host
-            peer = new Peer(undefined, { debug: 0 });
+                // Thử làm client trước rồi nếu không kết nối được thì chuyển sang host
+                peer = new Peer(undefined, { debug: 0 });
             peer.on('open', function() {
                 tryClientConnect(code);
             });
@@ -582,14 +588,22 @@
                 }
             });
 
-            connectAttemptTimer = setTimeout(function() {
-                if (!manualDisconnect && !isConnected && (!conn || !conn.open)) {
-                    startHostPeer(code);
-                }
-            }, 1800);
+                connectAttemptTimer = setTimeout(function() {
+                    if (!manualDisconnect && !isConnected && (!conn || !conn.open)) {
+                        startHostPeer(code);
+                    }
+                }, 1800);
+            } catch (err) {
+                statusText.textContent = '❌ Không thể bắt đầu kết nối: ' + (err && err.message ? err.message : err);
+                setConnection(false);
+            }
         }
 
         function startHostPeer(code) {
+            if (typeof Peer === 'undefined') {
+                statusText.textContent = '⚠️ Không tải được thư viện kết nối';
+                return;
+            }
             clearConnectAttemptTimer();
             if (peer && !peer.destroyed && isHost) return;
             teardownPeer();
