@@ -162,7 +162,7 @@
         #drawCanvas {
             display: block;
             touch-action: none;
-            cursor: crosshair;
+            cursor: grab;
             background: white;
             image-rendering: auto;
         }
@@ -392,7 +392,7 @@
         <li><strong>Lưu ý:</strong> Hoạt động cả khi 2 máy khác mạng WiFi/4G, không cần cùng mạng</li>
     </ul>
     <div style="margin-top:10px; font-size:0.7rem; opacity:0.6;">
-        <i class="fas fa-info-circle"></i> File nhiều trang: dùng nút ◀ ▶ để chuyển trang. Trên điện thoại: 1 ngón để vẽ, 2 ngón để phóng to/thu nhỏ và di chuyển xem trang
+        <i class="fas fa-info-circle"></i> File nhiều trang: dùng nút ◀ ▶ để chuyển trang. Trên điện thoại: 1 ngón để vẽ, 2 ngón để phóng to/thu nhỏ và di chuyển xem trang. Trên máy tính: chỉ dùng để mở file và xem — kéo chuột trái để di chuyển, lăn chuột để phóng to/thu nhỏ tại đúng vị trí con trỏ.
     </div>
 </div>
 
@@ -710,6 +710,21 @@
             applyTransform(true);
         }
 
+        // Phóng to/thu nhỏ ngay tại vị trí con trỏ chuột (giữ nguyên điểm đang trỏ vào)
+        function zoomAtPoint(clientX, clientY, factor) {
+            const containerRect = container.getBoundingClientRect();
+            const centerX = containerRect.left + containerRect.width / 2;
+            const centerY = containerRect.top + containerRect.height / 2;
+            // Điểm đang trỏ vào, quy về hệ tọa độ chưa scale của canvas-wrapper
+            const relX = (clientX - centerX - viewX) / viewScale;
+            const relY = (clientY - centerY - viewY) / viewScale;
+            const newScale = Math.min(Math.max(viewScale * factor, 0.15), 6);
+            viewX = viewX + relX * (viewScale - newScale);
+            viewY = viewY + relY * (viewScale - newScale);
+            viewScale = newScale;
+            applyTransform(false);
+        }
+
         function touchDistance(t0, t1) {
             const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
             return Math.hypot(dx, dy);
@@ -759,20 +774,46 @@
             if (e.touches.length === 0) stopDrawing(e);
         }
 
+        // ---------- Chuột trên máy tính: KHÔNG vẽ, chỉ xem/di chuyển/phóng to-thu nhỏ ----------
+        // Máy tính chỉ dùng để mở file, xem, kéo chuột trái để di chuyển, lăn chuột để zoom tại vị trí con trỏ.
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+        let panOrigin = { x: 0, y: 0 };
+
+        function startPan(e) {
+            if (e.button !== 0) return; // chỉ chuột trái
+            e.preventDefault();
+            isPanning = true;
+            panStart = { x: e.clientX, y: e.clientY };
+            panOrigin = { x: viewX, y: viewY };
+            canvas.style.cursor = 'grabbing';
+        }
+        function doPan(e) {
+            if (!isPanning) return;
+            e.preventDefault();
+            viewX = panOrigin.x + (e.clientX - panStart.x);
+            viewY = panOrigin.y + (e.clientY - panStart.y);
+            applyTransform(false);
+        }
+        function endPan() {
+            if (!isPanning) return;
+            isPanning = false;
+            canvas.style.cursor = 'grab';
+        }
+
         // Events
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseleave', stopDrawing);
+        canvas.addEventListener('mousedown', startPan);
+        window.addEventListener('mousemove', doPan);
+        window.addEventListener('mouseup', endPan);
         canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
         canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
         canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
         canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
-        // Chuột: lăn để phóng to/thu nhỏ (máy tính)
+        // Chuột: lăn để phóng to/thu nhỏ ngay tại vị trí con trỏ (máy tính)
         container.addEventListener('wheel', function(e) {
             e.preventDefault();
-            zoomBy(e.deltaY < 0 ? 1.1 : 0.9);
+            zoomAtPoint(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9);
         }, { passive: false });
 
         // ---------- Redraw ----------
