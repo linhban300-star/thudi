@@ -497,32 +497,6 @@
             return Math.random().toString(36).substring(2, 8).toUpperCase();
         }
 
-        const ROOM_STORAGE_KEY = 'wb-room-code';
-        const ROOM_URL_PARAM = 'room';
-
-        function generateRoomCode() {
-            return Math.random().toString(36).substring(2, 8).toUpperCase();
-        }
-
-        function persistRoomCode(code) {
-            const room = (code || '').trim().toUpperCase();
-            if (!room) return;
-            try {
-                localStorage.setItem(ROOM_STORAGE_KEY, room);
-            } catch (e) {}
-            const url = new URL(location.href);
-            url.searchParams.set(ROOM_URL_PARAM, room);
-            history.replaceState({}, '', url.toString());
-        }
-
-        function restoreRoomCode() {
-            const urlRoom = new URLSearchParams(location.search).get(ROOM_URL_PARAM);
-            const storedRoom = (localStorage.getItem(ROOM_STORAGE_KEY) || '').trim().toUpperCase();
-            if (urlRoom) return urlRoom.trim().toUpperCase();
-            if (storedRoom) return storedRoom;
-            return '';
-        }
-
         // true = người dùng chủ động bấm "Ngắt" -> KHÔNG tự kết nối lại
         // false = mất kết nối ngoài ý muốn (mất mạng, out app...) -> tự động thử kết nối lại
         let manualDisconnect = true;
@@ -545,11 +519,10 @@
         function connectPeer() {
             let code = (roomCodeInput.value || '').trim().toUpperCase();
             if (!code) {
-                code = restoreRoomCode() || generateRoomCode();
+                code = generateRoomCode();
                 roomCodeInput.value = code;
             }
             roomCode = code;
-            persistRoomCode(code);
             manualDisconnect = false;
             clearReconnectTimer();
             teardownPeer();
@@ -564,10 +537,6 @@
             });
 
             peer.on('connection', function(c) {
-                if (conn && conn.open) {
-                    c.close();
-                    return;
-                }
                 conn = c;
                 wireConnection();
             });
@@ -837,10 +806,6 @@
         }
 
         function startDrawing(e) {
-            if (!isConnected) {
-                statusText.textContent = '⚠️ Chưa kết nối!';
-                return;
-            }
             e.preventDefault();
             const pos = getCanvasCoords(e);
             drawing = true;
@@ -857,25 +822,23 @@
         }
 
         function draw(e) {
-            if (!drawing || !currentPath || !isConnected) return;
+            if (!drawing || !currentPath) return;
             e.preventDefault();
             const pos = getCanvasCoords(e);
             if (currentPath.tool === 'line' || currentPath.tool === 'circle') {
-                // Đường thẳng / đường tròn: chỉ giữ điểm bắt đầu và điểm hiện tại (xem trước khi kéo)
                 currentPath.points[1] = { x: pos.x, y: pos.y };
             } else {
-                // Bút / tẩy / đường cong: ghi lại toàn bộ đường kéo
                 currentPath.points.push({ x: pos.x, y: pos.y });
             }
             redrawAll();
         }
 
         function stopDrawing(e) {
-            if (drawing && currentPath && isConnected) {
+            if (drawing && currentPath) {
                 if (currentPath.points.length > 0) {
                     const pathCopy = { ...currentPath, points: [...currentPath.points] };
                     paths.push(pathCopy);
-                    sendDrawData(pathCopy);
+                    if (conn && conn.open) sendDrawData(pathCopy);
                 }
                 currentPath = null;
                 drawing = false;
@@ -1038,7 +1001,6 @@
         // ---------- Redraw ----------
         function redrawAll() {
             // Bước 1: vẽ lại toàn bộ nét (mực) trên canvas riêng, TÁCH KHỎI ảnh nền.
-            // Nhờ vậy khi tẩy (destination-out) chỉ xóa mực trong lớp này, không đụng tới ảnh/PDF/Word bên dưới.
             inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
             for (let path of paths) {
                 drawPath(inkCtx, path);
@@ -1049,6 +1011,8 @@
 
             // Bước 2: ghép ảnh nền + lớp mực vào canvas hiển thị
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             if (bgImage) {
                 ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
             }
@@ -1424,6 +1388,8 @@
                     pc.width = pageData.width;
                     pc.height = pageData.height;
                     const pctx = pc.getContext('2d');
+                    pctx.fillStyle = '#ffffff';
+                    pctx.fillRect(0, 0, pc.width, pc.height);
                     pctx.drawImage(img, 0, 0, pageData.width, pageData.height);
                     const pagePaths = allPagePaths[idx] || [];
                     for (let p of pagePaths) {
@@ -1436,6 +1402,22 @@
                 };
                 img.src = pageData.dataURL;
             });
+        }
+
+        function buildBlankCanvas() {
+            const pc = document.createElement('canvas');
+            pc.width = canvas.width;
+            pc.height = canvas.height;
+            const pctx = pc.getContext('2d');
+            pctx.fillStyle = '#ffffff';
+            pctx.fillRect(0, 0, pc.width, pc.height);
+            if (bgImage) {
+                pctx.drawImage(bgImage, 0, 0, pc.width, pc.height);
+            }
+            for (let p of paths) {
+                drawPath(pctx, p);
+            }
+            return pc;
         }
 
         savePdfBtn.addEventListener('click', async function() {
@@ -1456,11 +1438,10 @@
                         doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
                     }
                 } else {
-                    // Không có file (bảng vẽ trắng) -> chỉ có 1 trang là canvas hiện tại
-                    const dataURL = canvas.toDataURL('image/png');
-                    const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
-                    doc = new jsPDFCtor({ orientation: orientation, unit: 'px', format: [canvas.width, canvas.height] });
-                    doc.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
+                    const pc = buildBlankCanvas();
+                    const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
+                    doc = new jsPDFCtor({ orientation: orientation, unit: 'px', format: [pc.width, pc.height] });
+                    doc.addImage(pc.toDataURL('image/png'), 'PNG', 0, 0, pc.width, pc.height);
                 }
                 doc.save(getExportBaseName() + '.pdf');
             } catch (err) {
@@ -1472,16 +1453,15 @@
             try {
                 let imagesHtml = '';
                 if (fileState && fileState.pages && fileState.pages.length > 0) {
-                    // Xuất ĐẦY ĐỦ tất cả các trang trong file (kể cả trang chưa vẽ gì)
                     for (let i = 0; i < fileState.pages.length; i++) {
                         const pc = await buildPageCanvas(i);
                         const dataURL = pc.toDataURL('image/png');
                         const breakStyle = (i < fileState.pages.length - 1) ? 'page-break-after:always;' : '';
-                        imagesHtml += '<div style="' + breakStyle + '"><img src="' + dataURL + '" style="max-width:100%;" /></div>';
+                        imagesHtml += '<div style="' + breakStyle + '"><img src="' + dataURL + '" style="max-width:100%;height:auto;" /></div>';
                     }
                 } else {
-                    const dataURL = canvas.toDataURL('image/png');
-                    imagesHtml = '<img src="' + dataURL + '" style="max-width:100%;" />';
+                    const pc = buildBlankCanvas();
+                    imagesHtml = '<img src="' + pc.toDataURL('image/png') + '" style="max-width:100%;height:auto;" />';
                 }
                 const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
                     'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
@@ -1691,19 +1671,11 @@
         // Nếu mở từ link chia sẻ có sẵn ?room=MÃ thì tự điền và tự kết nối
         const urlParams = new URLSearchParams(location.search);
         const sharedRoom = urlParams.get('room');
-        const restoredRoom = restoreRoomCode();
         if (sharedRoom) {
-            const room = sharedRoom.trim().toUpperCase();
-            roomCodeInput.value = room;
-            persistRoomCode(room);
-            setTimeout(() => connectPeer(), 500);
-        } else if (restoredRoom) {
-            roomCodeInput.value = restoredRoom;
+            roomCodeInput.value = sharedRoom.trim().toUpperCase();
             setTimeout(() => connectPeer(), 500);
         } else {
-            const initialRoom = generateRoomCode();
-            roomCodeInput.value = initialRoom;
-            persistRoomCode(initialRoom);
+            roomCodeInput.value = generateRoomCode();
         }
 
         // Fit canvas ban đầu
