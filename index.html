@@ -497,6 +497,32 @@
             return Math.random().toString(36).substring(2, 8).toUpperCase();
         }
 
+        const ROOM_STORAGE_KEY = 'wb-room-code';
+        const ROOM_URL_PARAM = 'room';
+
+        function generateRoomCode() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function persistRoomCode(code) {
+            const room = (code || '').trim().toUpperCase();
+            if (!room) return;
+            try {
+                localStorage.setItem(ROOM_STORAGE_KEY, room);
+            } catch (e) {}
+            const url = new URL(location.href);
+            url.searchParams.set(ROOM_URL_PARAM, room);
+            history.replaceState({}, '', url.toString());
+        }
+
+        function restoreRoomCode() {
+            const urlRoom = new URLSearchParams(location.search).get(ROOM_URL_PARAM);
+            const storedRoom = (localStorage.getItem(ROOM_STORAGE_KEY) || '').trim().toUpperCase();
+            if (urlRoom) return urlRoom.trim().toUpperCase();
+            if (storedRoom) return storedRoom;
+            return '';
+        }
+
         // true = người dùng chủ động bấm "Ngắt" -> KHÔNG tự kết nối lại
         // false = mất kết nối ngoài ý muốn (mất mạng, out app...) -> tự động thử kết nối lại
         let manualDisconnect = true;
@@ -519,10 +545,11 @@
         function connectPeer() {
             let code = (roomCodeInput.value || '').trim().toUpperCase();
             if (!code) {
-                code = generateRoomCode();
+                code = restoreRoomCode() || generateRoomCode();
                 roomCodeInput.value = code;
             }
             roomCode = code;
+            persistRoomCode(code);
             manualDisconnect = false;
             clearReconnectTimer();
             teardownPeer();
@@ -537,6 +564,10 @@
             });
 
             peer.on('connection', function(c) {
+                if (conn && conn.open) {
+                    c.close();
+                    return;
+                }
                 conn = c;
                 wireConnection();
             });
@@ -1660,11 +1691,19 @@
         // Nếu mở từ link chia sẻ có sẵn ?room=MÃ thì tự điền và tự kết nối
         const urlParams = new URLSearchParams(location.search);
         const sharedRoom = urlParams.get('room');
+        const restoredRoom = restoreRoomCode();
         if (sharedRoom) {
-            roomCodeInput.value = sharedRoom.trim().toUpperCase();
+            const room = sharedRoom.trim().toUpperCase();
+            roomCodeInput.value = room;
+            persistRoomCode(room);
+            setTimeout(() => connectPeer(), 500);
+        } else if (restoredRoom) {
+            roomCodeInput.value = restoredRoom;
             setTimeout(() => connectPeer(), 500);
         } else {
-            roomCodeInput.value = generateRoomCode();
+            const initialRoom = generateRoomCode();
+            roomCodeInput.value = initialRoom;
+            persistRoomCode(initialRoom);
         }
 
         // Fit canvas ban đầu
