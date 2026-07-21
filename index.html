@@ -1085,10 +1085,11 @@
         function drawPath(context, path) {
             if (!path.points || path.points.length < 1) return;
             const tool = path.tool || 'pen';
+            const isEraser = tool === 'eraser';
             context.save();
-            context.globalCompositeOperation = (tool === 'eraser') ? 'destination-out' : 'source-over';
-            context.strokeStyle = path.color;
-            context.fillStyle = path.color;
+            context.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+            context.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : path.color;
+            context.fillStyle = isEraser ? 'rgba(0,0,0,1)' : path.color;
             context.lineWidth = path.width;
             context.lineCap = 'round';
             context.lineJoin = 'round';
@@ -1116,7 +1117,11 @@
                 if (path.points.length === 1) {
                     context.beginPath();
                     context.arc(path.points[0].x, path.points[0].y, path.width / 2, 0, Math.PI * 2);
-                    context.fill();
+                    if (isEraser) {
+                        context.fill();
+                    } else {
+                        context.fill();
+                    }
                 } else {
                     context.beginPath();
                     context.moveTo(path.points[0].x, path.points[0].y);
