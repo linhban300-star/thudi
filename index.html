@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Vẽ trên PDF &amp; Word - Nâng cao</title>
+    <title>Vẽ Từ Xa - Điện thoại điều khiển máy tính</title>
 
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">
     </script>
-    <!-- pdf-lib để tạo/lưu PDF -->
+    <!-- pdf-lib -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js">
     </script>
-    <!-- Mammoth.js cho Word -->
+    <!-- Mammoth.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
     </script>
 
     <style>
-        /* ----- RESET & CƠ BẢN ----- */
+        /* ----- RESET ----- */
         * {
             margin: 0;
             padding: 0;
@@ -32,7 +32,7 @@
             align-items: center;
         }
         .container {
-            max-width: 1100px;
+            max-width: 1200px;
             width: 100%;
             background: white;
             border-radius: 16px;
@@ -72,10 +72,6 @@
             cursor: pointer;
             font-size: 14px;
         }
-        .upload-area input[type="file"]:hover {
-            border-color: #6c5ce7;
-            background: #f8f7ff;
-        }
         .upload-area button {
             padding: 10px 24px;
             background: #6c5ce7;
@@ -103,7 +99,95 @@
             display: inline-block;
         }
 
-        /* ----- ĐIỀU HƯỚNG TRANG ----- */
+        /* ----- KẾT NỐI ----- */
+        .connection-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+        }
+        .connection-panel .room-code {
+            font-size: 20px;
+            font-weight: 700;
+            color: #6c5ce7;
+            background: white;
+            padding: 4px 16px;
+            border-radius: 8px;
+            border: 2px dashed #6c5ce7;
+            font-family: monospace;
+            letter-spacing: 2px;
+            min-width: 80px;
+            text-align: center;
+        }
+        .connection-panel .status-badge {
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .status-badge.disconnected {
+            background: #dfe6e9;
+            color: #636e72;
+        }
+        .status-badge.connected {
+            background: #00b894;
+            color: white;
+        }
+        .status-badge.waiting {
+            background: #fdcb6e;
+            color: #2d3436;
+        }
+        .connection-panel button {
+            padding: 6px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .connection-panel .btn-connect {
+            background: #0984e3;
+            color: white;
+        }
+        .connection-panel .btn-connect:hover {
+            background: #0770c4;
+        }
+        .connection-panel .btn-disconnect {
+            background: #e17055;
+            color: white;
+        }
+        .connection-panel .btn-disconnect:hover {
+            background: #c0392b;
+        }
+        .connection-panel .btn-copy {
+            background: #dfe6e9;
+            color: #2d3436;
+        }
+        .connection-panel .btn-copy:hover {
+            background: #b2bec3;
+        }
+        .connection-panel input {
+            padding: 6px 12px;
+            border: 1px solid #dfe6e9;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 120px;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+        .connection-panel .hint {
+            font-size: 13px;
+            color: #636e72;
+            margin-left: 5px;
+        }
+
+        /* ----- PAGE NAV ----- */
         .page-nav {
             display: flex;
             flex-wrap: wrap;
@@ -274,6 +358,22 @@
             height: auto;
         }
 
+        /* ----- REMOTE CURSOR ----- */
+        .remote-cursor {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(108, 92, 231, 0.8);
+            border: 2px solid white;
+            box-shadow: 0 0 10px rgba(108, 92, 231, 0.5);
+            pointer-events: none;
+            display: none;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            transition: none;
+        }
+
         /* ----- STATUS ----- */
         .status {
             margin-top: 12px;
@@ -286,12 +386,6 @@
         }
         .status strong {
             color: #2d3436;
-        }
-        .status .success {
-            color: #00b894;
-        }
-        .status .error {
-            color: #e17055;
         }
 
         /* ----- RESPONSIVE ----- */
@@ -317,9 +411,57 @@
                 padding: 4px 10px;
                 font-size: 12px;
             }
+            .connection-panel {
+                padding: 10px 12px;
+            }
+            .connection-panel .room-code {
+                font-size: 16px;
+                min-width: 60px;
+            }
             .upload-area input[type="file"] {
                 font-size: 13px;
                 padding: 8px 10px;
+            }
+        }
+
+        /* ----- Mobile-only controls (hiện trên điện thoại) ----- */
+        .mobile-controls {
+            display: none;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #e9ecef;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+        .mobile-controls button {
+            padding: 8px 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .mobile-controls button.active {
+            background: #6c5ce7;
+            color: white;
+            border-color: #6c5ce7;
+        }
+        .mobile-controls .color-picker-mobile {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 2px;
+            cursor: pointer;
+        }
+
+        @media (pointer: coarse) {
+            .mobile-controls {
+                display: flex;
             }
         }
     </style>
@@ -328,8 +470,8 @@
 
     <div class="container">
         <h1>
-            🖊️ Vẽ &amp; Chú thích File Nâng cao
-            <small>PDF · Word · Lưu file · Thêm/Xóa trang</small>
+            🖊️ Vẽ Từ Xa
+            <small>Điện thoại điều khiển máy tính</small>
         </h1>
 
         <!-- UPLOAD -->
@@ -339,7 +481,20 @@
             <span class="file-name" id="fileName">Chưa có file</span>
         </div>
 
-        <!-- ĐIỀU HƯỚNG TRANG (chỉ PDF) -->
+        <!-- KẾT NỐI -->
+        <div class="connection-panel" id="connectionPanel">
+            <span style="font-weight:600;">📡 Kết nối:</span>
+            <input type="text" id="roomInput" placeholder="Nhập mã phòng" value="" maxlength="6" />
+            <button class="btn-connect" id="connectBtn">🔗 Kết nối</button>
+            <button class="btn-disconnect" id="disconnectBtn" style="display:none;">🔌 Ngắt</button>
+            <span class="status-badge disconnected" id="connectionStatus">Chưa kết nối</span>
+            <span style="font-weight:600;margin-left:10px;">Mã phòng:</span>
+            <span class="room-code" id="roomCode">------</span>
+            <button class="btn-copy" id="copyRoomBtn">📋 Sao chép</button>
+            <span class="hint">(Chia sẻ mã này với điện thoại)</span>
+        </div>
+
+        <!-- PAGE NAV -->
         <div class="page-nav" id="pageNav" style="display:none;">
             <button id="prevPage">◀ Trang trước</button>
             <span class="page-info" id="pageInfo">Trang 1 / 1</span>
@@ -380,6 +535,17 @@
             <canvas id="pdfCanvas"></canvas>
             <div id="wordContent"></div>
             <canvas id="drawLayer"></canvas>
+            <div class="remote-cursor" id="remoteCursor"></div>
+        </div>
+
+        <!-- Mobile Controls -->
+        <div class="mobile-controls" id="mobileControls">
+            <button id="mPenBtn" class="active">✏️</button>
+            <button id="mHighlightBtn">🟡</button>
+            <button id="mEraserBtn">🧹</button>
+            <input type="color" id="mColorPicker" class="color-picker-mobile" value="#e17055" />
+            <button id="mUndoBtn">↩️</button>
+            <button id="mClearBtn">🗑️</button>
         </div>
 
         <div class="status" id="status">
@@ -389,7 +555,14 @@
 
     <script>
         // ============================================================
-        // 1. KHỞI TẠO
+        // 1. CẤU HÌNH WEBSOCKET
+        // ============================================================
+        // Sử dụng WebSocket public broker (Mosquitto test server)
+        // Trong thực tế, bạn nên chạy server WebSocket riêng
+        const WS_BROKER = 'wss://test.mosquitto.org:8081/mqtt';
+
+        // ============================================================
+        // 2. KHỞI TẠO DOM
         // ============================================================
         const fileInput = document.getElementById('fileInput');
         const loadBtn = document.getElementById('loadBtn');
@@ -403,7 +576,7 @@
         const wordContent = document.getElementById('wordContent');
         const viewerWrapper = document.getElementById('viewerWrapper');
 
-        // Các nút
+        // Nút toolbar
         const penBtn = document.getElementById('penBtn');
         const highlightBtn = document.getElementById('highlightBtn');
         const eraserBtn = document.getElementById('eraserBtn');
@@ -414,7 +587,7 @@
         const clearBtn = document.getElementById('clearBtn');
         const savePdfBtn = document.getElementById('savePdfBtn');
 
-        // Điều hướng trang
+        // Page nav
         const pageNav = document.getElementById('pageNav');
         const prevPageBtn = document.getElementById('prevPage');
         const nextPageBtn = document.getElementById('nextPage');
@@ -422,34 +595,58 @@
         const addPageBtn = document.getElementById('addPageBtn');
         const deletePageBtn = document.getElementById('deletePageBtn');
 
+        // Connection
+        const roomInput = document.getElementById('roomInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const roomCode = document.getElementById('roomCode');
+        const copyRoomBtn = document.getElementById('copyRoomBtn');
+        const remoteCursor = document.getElementById('remoteCursor');
+
+        // Mobile
+        const mPenBtn = document.getElementById('mPenBtn');
+        const mHighlightBtn = document.getElementById('mHighlightBtn');
+        const mEraserBtn = document.getElementById('mEraserBtn');
+        const mColorPicker = document.getElementById('mColorPicker');
+        const mUndoBtn = document.getElementById('mUndoBtn');
+        const mClearBtn = document.getElementById('mClearBtn');
+
         // ============================================================
-        // 2. BIẾN TRẠNG THÁI
+        // 3. BIẾN TRẠNG THÁI
         // ============================================================
         let currentMode = 'pen';
         let isDrawing = false;
         let lastX = 0,
             lastY = 0;
-        let currentFileType = null; // 'pdf' | 'word'
+        let currentFileType = null;
         let pdfDoc = null;
-        let pdfData = null; // Lưu dữ liệu PDF gốc (ArrayBuffer)
+        let pdfData = null;
         let currentPageNum = 1;
         let totalPages = 0;
         let scale = 1.5;
         let canvasWidth = 0;
         let canvasHeight = 0;
 
-        // Lịch sử vẽ theo từng trang: { pageNum: [path1, path2, ...] }
         let pageDrawings = {};
         let currentPath = [];
         const MAX_HISTORY = 50;
 
+        // WebSocket
+        let ws = null;
+        let isConnected = false;
+        let roomId = '';
+        let isHost = true; // Máy tính là host, điện thoại là client
+
+        // Remote drawing state
+        let remoteDrawing = false;
+        let remotePath = [];
+
         // ============================================================
-        // 3. QUẢN LÝ LỊCH SỬ VẼ THEO TRANG
+        // 4. QUẢN LÝ LỊCH SỬ VẼ
         // ============================================================
         function getDrawingsForPage(pageNum) {
-            if (!pageDrawings[pageNum]) {
-                pageDrawings[pageNum] = [];
-            }
+            if (!pageDrawings[pageNum]) pageDrawings[pageNum] = [];
             return pageDrawings[pageNum];
         }
 
@@ -462,9 +659,7 @@
                 size: size,
                 mode: mode
             });
-            if (paths.length > MAX_HISTORY) {
-                paths.shift();
-            }
+            if (paths.length > MAX_HISTORY) paths.shift();
         }
 
         function redrawPage(pageNum) {
@@ -519,7 +714,7 @@
         }
 
         // ============================================================
-        // 4. RESIZE CANVAS
+        // 5. RESIZE CANVAS
         // ============================================================
         function resizeDrawLayer() {
             const rect = viewerWrapper.getBoundingClientRect();
@@ -529,15 +724,10 @@
             if (currentFileType === 'pdf' && pdfDoc) {
                 pdfDoc.getPage(currentPageNum).then(page => {
                     const viewport = page.getViewport({ scale: scale });
-                    const ratio = viewport.height / viewport.width;
-                    h = w * ratio;
+                    h = w * (viewport.height / viewport.width);
                     setCanvasSize(w, h);
                 });
-            } else if (currentFileType === 'word') {
-                h = w * 1.4;
-                setCanvasSize(w, h);
             } else {
-                h = w * 1.4;
                 setCanvasSize(w, h);
             }
         }
@@ -549,20 +739,17 @@
             drawCanvas.style.height = h + 'px';
             canvasWidth = w;
             canvasHeight = h;
-            if (currentFileType === 'pdf') {
-                redrawPage(currentPageNum);
-            } else {
-                redrawPage(1);
-            }
+            const page = currentFileType === 'pdf' ? currentPageNum : 1;
+            redrawPage(page);
         }
 
         // ============================================================
-        // 5. SỰ KIỆN VẼ (Chuột + Cảm ứng)
+        // 6. VẼ LOCAL
         // ============================================================
         function getCoords(e) {
             const rect = drawCanvas.getBoundingClientRect();
-            const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
-            const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+            const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+            const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
             const x = (clientX - rect.left);
             const y = (clientY - rect.top);
             const scaleX = drawCanvas.width / rect.width;
@@ -582,18 +769,17 @@
             lastY = coords.y;
             currentPath = [];
             currentPath.push({ x: lastX, y: lastY });
-            // Vẽ điểm đầu
+
+            // Gửi sự kiện bắt đầu vẽ qua WebSocket
+            sendDrawEvent('start', { x: lastX, y: lastY });
+
             ctx.save();
             ctx.beginPath();
             const size = currentMode === 'eraser' ? parseInt(sizeSlider.value) * 2 : parseInt(sizeSlider.value);
             ctx.arc(lastX, lastY, size / 2, 0, Math.PI * 2);
-            if (currentMode === 'eraser') {
-                ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            } else if (currentMode === 'highlight') {
-                ctx.fillStyle = 'rgba(255,235,59,0.35)';
-            } else {
-                ctx.fillStyle = colorPicker.value;
-            }
+            if (currentMode === 'eraser') ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            else if (currentMode === 'highlight') ctx.fillStyle = 'rgba(255,235,59,0.35)';
+            else ctx.fillStyle = colorPicker.value;
             ctx.fill();
             ctx.restore();
         }
@@ -632,6 +818,9 @@
             currentPath.push({ x, y });
             lastX = x;
             lastY = y;
+
+            // Gửi điểm vẽ qua WebSocket
+            sendDrawEvent('move', { x: x, y: y });
         }
 
         function endDraw(e) {
@@ -644,10 +833,362 @@
                 const page = currentFileType === 'pdf' ? currentPageNum : 1;
                 savePathForPage(page, currentPath, color, size, mode);
                 currentPath = [];
+
+                // Gửi sự kiện kết thúc
+                sendDrawEvent('end', {});
             }
             isDrawing = false;
         }
 
+        // ============================================================
+        // 7. WEBSOCKET - KẾT NỐI & GIAO TIẾP
+        // ============================================================
+        function generateRoomId() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        function connectWebSocket(room) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+
+            roomId = room || generateRoomId();
+            roomCode.textContent = roomId;
+            roomInput.value = roomId;
+
+            status.innerHTML = `⏳ Đang kết nối đến phòng ${roomId}...`;
+
+            try {
+                // Sử dụng WebSocket trực tiếp với broker MQTT (dùng cho demo)
+                // Trong thực tế, bạn nên chạy server WebSocket riêng
+                ws = new WebSocket(WS_BROKER);
+
+                ws.onopen = function() {
+                    isConnected = true;
+                    updateConnectionUI(true);
+                    status.innerHTML = `✅ Đã kết nối! Phòng: <strong>${roomId}</strong>`;
+
+                    // Đăng ký topic
+                    const subscribeMsg = `SUBSCRIBE\nroom/${roomId}\n0`;
+                    ws.send(subscribeMsg);
+
+                    // Gửi thông báo tham gia
+                    const joinMsg = `PUBLISH\nroom/${roomId}\n${JSON.stringify({ type: 'join', role: 'host', room: roomId })}`;
+                    ws.send(joinMsg);
+
+                    // Gửi trạng thái hiện tại
+                    syncState();
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleWebSocketMessage(data);
+                    } catch (e) {
+                        // Có thể là dữ liệu MQTT raw, bỏ qua
+                        console.log('Raw data:', event.data);
+                    }
+                };
+
+                ws.onerror = function(err) {
+                    console.error('WebSocket error:', err);
+                    status.innerHTML = '❌ Lỗi kết nối WebSocket';
+                };
+
+                ws.onclose = function() {
+                    isConnected = false;
+                    updateConnectionUI(false);
+                    status.innerHTML = '🔌 Đã ngắt kết nối';
+                };
+
+            } catch (err) {
+                status.innerHTML = '❌ Không thể kết nối: ' + err.message;
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            // Xử lý message từ remote
+            if (data.type === 'draw') {
+                handleRemoteDraw(data);
+            } else if (data.type === 'sync') {
+                handleRemoteSync(data);
+            } else if (data.type === 'join') {
+                status.innerHTML = `📱 Có thiết bị khác đã tham gia phòng ${roomId}`;
+            } else if (data.type === 'mode_change') {
+                // Đổi mode theo remote
+                setMode(data.mode);
+            } else if (data.type === 'color_change') {
+                colorPicker.value = data.color;
+                mColorPicker.value = data.color;
+            } else if (data.type === 'size_change') {
+                sizeSlider.value = data.size;
+                sizeDisplay.textContent = data.size;
+            } else if (data.type === 'undo') {
+                const page = currentFileType === 'pdf' ? currentPageNum : 1;
+                undoPage(page);
+                status.innerHTML = '↩️ Remote đã hoàn tác';
+            } else if (data.type === 'clear') {
+                const page = currentFileType === 'pdf' ? currentPageNum : 1;
+                clearPage(page);
+                status.innerHTML = '🗑️ Remote đã xóa hết';
+            }
+        }
+
+        function handleRemoteDraw(data) {
+            const { action, x, y, color, size, mode } = data;
+
+            if (action === 'start') {
+                remoteDrawing = true;
+                remotePath = [{ x, y }];
+                // Hiển thị con trỏ remote
+                showRemoteCursor(x, y);
+                // Vẽ điểm bắt đầu
+                ctx.save();
+                ctx.beginPath();
+                const sz = size || parseInt(sizeSlider.value);
+                ctx.arc(x, y, sz / 2, 0, Math.PI * 2);
+                ctx.fillStyle = color || colorPicker.value;
+                ctx.fill();
+                ctx.restore();
+            } else if (action === 'move' && remoteDrawing) {
+                remotePath.push({ x, y });
+                showRemoteCursor(x, y);
+
+                // Vẽ đường từ điểm cuối đến điểm mới
+                const last = remotePath[remotePath.length - 2];
+                if (last) {
+                    ctx.save();
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    const sz = size || parseInt(sizeSlider.value);
+                    ctx.lineWidth = sz;
+                    ctx.strokeStyle = color || colorPicker.value;
+                    ctx.beginPath();
+                    ctx.moveTo(last.x, last.y);
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            } else if (action === 'end' && remoteDrawing) {
+                // Lưu path remote vào lịch sử
+                if (remotePath.length >= 2) {
+                    const page = currentFileType === 'pdf' ? currentPageNum : 1;
+                    const clr = color || colorPicker.value;
+                    const sz = size || parseInt(sizeSlider.value);
+                    const md = mode || currentMode;
+                    savePathForPage(page, remotePath, clr, sz, md);
+                }
+                remoteDrawing = false;
+                remotePath = [];
+                hideRemoteCursor();
+            }
+        }
+
+        function handleRemoteSync(data) {
+            // Đồng bộ trạng thái từ remote
+            if (data.pageDrawings) {
+                pageDrawings = data.pageDrawings;
+                const page = currentFileType === 'pdf' ? currentPageNum : 1;
+                redrawPage(page);
+            }
+        }
+
+        function sendDrawEvent(action, coords) {
+            if (!isConnected || !ws) return;
+            const msg = {
+                type: 'draw',
+                action: action,
+                x: coords.x || 0,
+                y: coords.y || 0,
+                color: colorPicker.value,
+                size: parseInt(sizeSlider.value),
+                mode: currentMode,
+                room: roomId
+            };
+            sendWsMessage(msg);
+        }
+
+        function sendWsMessage(msg) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const payload = `PUBLISH\nroom/${roomId}\n${JSON.stringify(msg)}`;
+                ws.send(payload);
+            }
+        }
+
+        function syncState() {
+            // Gửi trạng thái hiện tại
+            const msg = {
+                type: 'sync',
+                pageDrawings: pageDrawings,
+                currentPage: currentPageNum,
+                fileType: currentFileType,
+                room: roomId
+            };
+            sendWsMessage(msg);
+        }
+
+        function showRemoteCursor(x, y) {
+            const rect = drawCanvas.getBoundingClientRect();
+            const scaleX = drawCanvas.width / rect.width;
+            const scaleY = drawCanvas.height / rect.height;
+            remoteCursor.style.display = 'block';
+            remoteCursor.style.left = (x / scaleX + rect.left) + 'px';
+            remoteCursor.style.top = (y / scaleY + rect.top) + 'px';
+        }
+
+        function hideRemoteCursor() {
+            remoteCursor.style.display = 'none';
+        }
+
+        function updateConnectionUI(connected) {
+            if (connected) {
+                connectionStatus.textContent = '✅ Đã kết nối';
+                connectionStatus.className = 'status-badge connected';
+                connectBtn.style.display = 'none';
+                disconnectBtn.style.display = 'inline-block';
+                roomInput.disabled = true;
+            } else {
+                connectionStatus.textContent = '🔴 Chưa kết nối';
+                connectionStatus.className = 'status-badge disconnected';
+                connectBtn.style.display = 'inline-block';
+                disconnectBtn.style.display = 'none';
+                roomInput.disabled = false;
+            }
+        }
+
+        // ============================================================
+        // 8. SỰ KIỆN KẾT NỐI
+        // ============================================================
+        connectBtn.addEventListener('click', () => {
+            const room = roomInput.value.trim() || generateRoomId();
+            connectWebSocket(room);
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            isConnected = false;
+            updateConnectionUI(false);
+            status.innerHTML = '🔌 Đã ngắt kết nối';
+        });
+
+        copyRoomBtn.addEventListener('click', () => {
+            const text = roomCode.textContent;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    status.innerHTML = '📋 Đã sao chép mã phòng: ' + text;
+                });
+            } else {
+                // Fallback
+                const input = document.createElement('input');
+                input.value = text;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                status.innerHTML = '📋 Đã sao chép mã phòng: ' + text;
+            }
+        });
+
+        // Tự động tạo mã phòng khi tải trang
+        window.addEventListener('DOMContentLoaded', () => {
+            const newRoom = generateRoomId();
+            roomCode.textContent = newRoom;
+            roomInput.value = newRoom;
+        });
+
+        // ============================================================
+        // 9. TOOLBAR EVENTS
+        // ============================================================
+        function setMode(mode) {
+            currentMode = mode;
+            [penBtn, highlightBtn, eraserBtn].forEach(btn => btn.classList.remove('active'));
+            [mPenBtn, mHighlightBtn, mEraserBtn].forEach(btn => btn.classList.remove('active'));
+
+            if (mode === 'pen') {
+                penBtn.classList.add('active');
+                mPenBtn.classList.add('active');
+            } else if (mode === 'highlight') {
+                highlightBtn.classList.add('active');
+                mHighlightBtn.classList.add('active');
+            } else if (mode === 'eraser') {
+                eraserBtn.classList.add('active');
+                mEraserBtn.classList.add('active');
+            }
+            drawCanvas.style.cursor = mode === 'eraser' ? 'cell' : 'crosshair';
+
+            // Gửi thay đổi mode qua WebSocket
+            if (isConnected) {
+                sendWsMessage({ type: 'mode_change', mode: mode, room: roomId });
+            }
+        }
+
+        penBtn.addEventListener('click', () => setMode('pen'));
+        highlightBtn.addEventListener('click', () => setMode('highlight'));
+        eraserBtn.addEventListener('click', () => setMode('eraser'));
+
+        mPenBtn.addEventListener('click', () => setMode('pen'));
+        mHighlightBtn.addEventListener('click', () => setMode('highlight'));
+        mEraserBtn.addEventListener('click', () => setMode('eraser'));
+
+        colorPicker.addEventListener('input', () => {
+            mColorPicker.value = colorPicker.value;
+            if (isConnected) {
+                sendWsMessage({ type: 'color_change', color: colorPicker.value, room: roomId });
+            }
+        });
+
+        mColorPicker.addEventListener('input', () => {
+            colorPicker.value = mColorPicker.value;
+            if (isConnected) {
+                sendWsMessage({ type: 'color_change', color: mColorPicker.value, room: roomId });
+            }
+        });
+
+        sizeSlider.addEventListener('input', () => {
+            sizeDisplay.textContent = sizeSlider.value;
+            if (isConnected) {
+                sendWsMessage({ type: 'size_change', size: parseInt(sizeSlider.value), room: roomId });
+            }
+        });
+
+        undoBtn.addEventListener('click', () => {
+            const page = currentFileType === 'pdf' ? currentPageNum : 1;
+            if (undoPage(page)) {
+                status.innerHTML = '↩️ Đã hoàn tác 1 bước';
+                if (isConnected) {
+                    sendWsMessage({ type: 'undo', room: roomId });
+                }
+            } else {
+                status.innerHTML = 'ℹ️ Không còn gì để hoàn tác';
+            }
+        });
+
+        mUndoBtn.addEventListener('click', () => {
+            undoBtn.click();
+        });
+
+        clearBtn.addEventListener('click', () => {
+            const page = currentFileType === 'pdf' ? currentPageNum : 1;
+            if (clearPage(page)) {
+                status.innerHTML = '🗑️ Đã xóa toàn bộ nét vẽ';
+                if (isConnected) {
+                    sendWsMessage({ type: 'clear', room: roomId });
+                }
+            } else {
+                status.innerHTML = 'ℹ️ Trang này chưa có nét vẽ nào';
+            }
+        });
+
+        mClearBtn.addEventListener('click', () => {
+            clearBtn.click();
+        });
+
+        // ============================================================
+        // 10. SỰ KIỆN VẼ LOCAL
+        // ============================================================
         drawCanvas.addEventListener('mousedown', startDraw);
         drawCanvas.addEventListener('mousemove', moveDraw);
         drawCanvas.addEventListener('mouseup', endDraw);
@@ -658,45 +1199,7 @@
         drawCanvas.addEventListener('touchcancel', endDraw, { passive: false });
 
         // ============================================================
-        // 6. TOOLBAR
-        // ============================================================
-        function setMode(mode) {
-            currentMode = mode;
-            [penBtn, highlightBtn, eraserBtn].forEach(btn => btn.classList.remove('active'));
-            if (mode === 'pen') penBtn.classList.add('active');
-            else if (mode === 'highlight') highlightBtn.classList.add('active');
-            else if (mode === 'eraser') eraserBtn.classList.add('active');
-            drawCanvas.style.cursor = mode === 'eraser' ? 'cell' : 'crosshair';
-        }
-
-        penBtn.addEventListener('click', () => setMode('pen'));
-        highlightBtn.addEventListener('click', () => setMode('highlight'));
-        eraserBtn.addEventListener('click', () => setMode('eraser'));
-        colorPicker.addEventListener('input', () => {});
-        sizeSlider.addEventListener('input', () => {
-            sizeDisplay.textContent = sizeSlider.value;
-        });
-
-        undoBtn.addEventListener('click', () => {
-            const page = currentFileType === 'pdf' ? currentPageNum : 1;
-            if (undoPage(page)) {
-                status.innerHTML = '↩️ Đã hoàn tác 1 bước';
-            } else {
-                status.innerHTML = 'ℹ️ Không còn gì để hoàn tác';
-            }
-        });
-
-        clearBtn.addEventListener('click', () => {
-            const page = currentFileType === 'pdf' ? currentPageNum : 1;
-            if (clearPage(page)) {
-                status.innerHTML = '🗑️ Đã xóa toàn bộ nét vẽ trên trang này';
-            } else {
-                status.innerHTML = 'ℹ️ Trang này chưa có nét vẽ nào';
-            }
-        });
-
-        // ============================================================
-        // 7. TẢI PDF
+        // 11. TẢI PDF
         // ============================================================
         async function loadPDF(file) {
             pdfData = await file.arrayBuffer();
@@ -713,6 +1216,9 @@
             pageDrawings = {};
             await renderPDFPage(currentPageNum);
             status.innerHTML = `📄 Đã tải PDF: <strong>${file.name}</strong> | ${totalPages} trang`;
+
+            // Đồng bộ sau khi load
+            if (isConnected) syncState();
         }
 
         async function renderPDFPage(pageNum) {
@@ -732,7 +1238,6 @@
             };
             await page.render(renderContext).promise;
 
-            // Cập nhật kích thước canvas vẽ
             drawCanvas.width = viewport.width;
             drawCanvas.height = viewport.height;
             drawCanvas.style.width = viewport.width + 'px';
@@ -747,12 +1252,13 @@
         }
 
         // ============================================================
-        // 8. ĐIỀU HƯỚNG TRANG PDF
+        // 12. ĐIỀU HƯỚNG TRANG
         // ============================================================
         prevPageBtn.addEventListener('click', async () => {
             if (currentPageNum > 1) {
                 currentPageNum--;
                 await renderPDFPage(currentPageNum);
+                if (isConnected) syncState();
             }
         });
 
@@ -760,27 +1266,26 @@
             if (currentPageNum < totalPages) {
                 currentPageNum++;
                 await renderPDFPage(currentPageNum);
+                if (isConnected) syncState();
             }
         });
 
         // ============================================================
-        // 9. THÊM / XÓA TRANG PDF
+        // 13. THÊM / XÓA TRANG
         // ============================================================
         addPageBtn.addEventListener('click', async () => {
             if (!pdfDoc) return;
             try {
-                // Tạo trang mới trắng
                 const pdfLibDoc = await PDFLib.PDFDocument.load(pdfData);
-                const newPage = pdfLibDoc.addPage();
-                // Copy tất cả trang cũ
+                pdfLibDoc.addPage();
                 const newPdfBytes = await pdfLibDoc.save();
                 pdfData = newPdfBytes;
                 pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
                 totalPages = pdfDoc.numPages;
-                // Di chuyển đến trang mới
                 currentPageNum = totalPages;
                 await renderPDFPage(currentPageNum);
                 status.innerHTML = '✅ Đã thêm trang mới';
+                if (isConnected) syncState();
             } catch (err) {
                 status.innerHTML = '❌ Lỗi thêm trang: ' + err.message;
             }
@@ -794,26 +1299,23 @@
             if (!confirm(`Xóa trang ${currentPageNum}?`)) return;
             try {
                 const pdfLibDoc = await PDFLib.PDFDocument.load(pdfData);
-                // Xóa trang (index bắt đầu từ 0)
                 pdfLibDoc.removePage(currentPageNum - 1);
                 const newPdfBytes = await pdfLibDoc.save();
                 pdfData = newPdfBytes;
                 pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
                 totalPages = pdfDoc.numPages;
-                if (currentPageNum > totalPages) {
-                    currentPageNum = totalPages;
-                }
-                // Xóa dữ liệu vẽ của trang đã xóa
+                if (currentPageNum > totalPages) currentPageNum = totalPages;
                 delete pageDrawings[currentPageNum];
                 await renderPDFPage(currentPageNum);
                 status.innerHTML = '✅ Đã xóa trang';
+                if (isConnected) syncState();
             } catch (err) {
                 status.innerHTML = '❌ Lỗi xóa trang: ' + err.message;
             }
         });
 
         // ============================================================
-        // 10. TẢI WORD
+        // 14. TẢI WORD
         // ============================================================
         async function loadWord(file) {
             const arrayBuffer = await file.arrayBuffer();
@@ -831,10 +1333,11 @@
                 redrawPage(1);
             }, 100);
             status.innerHTML = `📄 Đã tải Word: <strong>${file.name}</strong>`;
+            if (isConnected) syncState();
         }
 
         // ============================================================
-        // 11. XỬ LÝ UPLOAD
+        // 15. XỬ LÝ UPLOAD
         // ============================================================
         function handleFile(file) {
             if (!file) return;
@@ -858,15 +1361,8 @@
             }
         });
 
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                // Tự động load nếu muốn, bỏ comment dòng dưới
-                // handleFile(e.target.files[0]);
-            }
-        });
-
         // ============================================================
-        // 12. LƯU PDF ĐÃ VẼ
+        // 16. LƯU PDF
         // ============================================================
         savePdfBtn.addEventListener('click', async () => {
             if (currentFileType !== 'pdf') {
@@ -875,90 +1371,70 @@
             }
             try {
                 status.innerHTML = '⏳ Đang xử lý lưu file...';
-
-                // Tải PDF gốc
                 const pdfLibDoc = await PDFLib.PDFDocument.load(pdfData);
                 const pages = pdfLibDoc.getPages();
 
-                // Với mỗi trang có nét vẽ, vẽ lên trang PDF
                 for (const pageNumStr in pageDrawings) {
                     const pageNum = parseInt(pageNumStr);
                     const paths = pageDrawings[pageNum];
                     if (!paths || paths.length === 0) continue;
-
                     const pageIndex = pageNum - 1;
                     if (pageIndex >= pages.length) continue;
                     const pdfPage = pages[pageIndex];
                     const { width, height } = pdfPage.getSize();
 
-                    // Vẽ từng nét lên PDF
                     for (const path of paths) {
                         const points = path.points;
                         if (points.length < 2) continue;
+                        const rgb = hexToRgb(path.color);
 
-                        // Tạo đường dẫn
-                        let pathString = '';
-                        for (let i = 0; i < points.length; i++) {
-                            const x = points[i].x / canvasWidth * width;
-                            const y = (1 - points[i].y / canvasHeight) * height;
-                            if (i === 0) {
-                                pathString += `${x} ${y} m `;
-                            } else {
-                                pathString += `${x} ${y} l `;
+                        if (path.mode === 'highlight') {
+                            // Highlight: vẽ các đoạn thẳng với màu vàng mờ
+                            for (let i = 0; i < points.length - 1; i++) {
+                                const p1 = points[i];
+                                const p2 = points[i + 1];
+                                pdfPage.drawLine({
+                                    start: { x: p1.x / canvasWidth * width, y: (1 - p1.y / canvasHeight) * height },
+                                    end: { x: p2.x / canvasWidth * width, y: (1 - p2.y / canvasHeight) * height },
+                                    thickness: path.size * 3 * (width / canvasWidth),
+                                    color: PDFLib.rgb(1, 0.92, 0.23),
+                                    opacity: 0.35,
+                                });
                             }
-                        }
-                        pathString += 'S';
-
-                        // Màu sắc
-                        let color = path.color;
-                        let opacity = 1;
-                        let lineWidth = path.size * (width / canvasWidth);
-
-                        if (path.mode === 'eraser') {
-                            // Với tẩy, dùng màu trắng
-                            pdfPage.drawRectangle({
-                                x: 0,
-                                y: 0,
-                                width: width,
-                                height: height,
-                                color: PDFLib.rgb(1, 1, 1),
-                                opacity: 0,
-                                blendMode: 'Normal',
-                            });
                             continue;
                         }
 
-                        if (path.mode === 'highlight') {
-                            // Highlight: vàng mờ, nét to
-                            const hex = '#ffeb3b';
-                            const rgb = hexToRgb(hex);
-                            pdfPage.drawRectangle({
-                                x: 0,
-                                y: 0,
-                                width: width,
-                                height: height,
-                                color: PDFLib.rgb(rgb.r, rgb.g, rgb.b),
-                                opacity: 0.35,
-                                blendMode: 'Normal',
-                            });
+                        if (path.mode === 'eraser') {
+                            // Tẩy: vẽ màu trắng
+                            for (let i = 0; i < points.length - 1; i++) {
+                                const p1 = points[i];
+                                const p2 = points[i + 1];
+                                pdfPage.drawLine({
+                                    start: { x: p1.x / canvasWidth * width, y: (1 - p1.y / canvasHeight) * height },
+                                    end: { x: p2.x / canvasWidth * width, y: (1 - p2.y / canvasHeight) * height },
+                                    thickness: path.size * 2 * (width / canvasWidth),
+                                    color: PDFLib.rgb(1, 1, 1),
+                                    opacity: 1,
+                                });
+                            }
                             continue;
                         }
 
                         // Bút thường
-                        const rgb = hexToRgb(color);
-                        pdfPage.drawLine({
-                            start: { x: points[0].x / canvasWidth * width, y: (1 - points[0].y / canvasHeight) *
-                                    height },
-                            end: { x: points[points.length - 1].x / canvasWidth * width, y: (1 - points[points
-                                    .length - 1].y / canvasHeight) * height },
-                            thickness: lineWidth,
-                            color: PDFLib.rgb(rgb.r, rgb.g, rgb.b),
-                            opacity: opacity,
-                        });
+                        for (let i = 0; i < points.length - 1; i++) {
+                            const p1 = points[i];
+                            const p2 = points[i + 1];
+                            pdfPage.drawLine({
+                                start: { x: p1.x / canvasWidth * width, y: (1 - p1.y / canvasHeight) * height },
+                                end: { x: p2.x / canvasWidth * width, y: (1 - p2.y / canvasHeight) * height },
+                                thickness: path.size * (width / canvasWidth),
+                                color: PDFLib.rgb(rgb.r, rgb.g, rgb.b),
+                                opacity: 1,
+                            });
+                        }
                     }
                 }
 
-                // Lưu file PDF mới
                 const pdfBytes = await pdfLibDoc.save();
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
@@ -969,7 +1445,6 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-
                 status.innerHTML = '✅ Đã lưu file PDF thành công!';
             } catch (err) {
                 status.innerHTML = '❌ Lỗi lưu file: ' + err.message;
@@ -987,9 +1462,10 @@
         }
 
         // ============================================================
-        // 13. KHỞI TẠO
+        // 17. KHỞI TẠO
         // ============================================================
         setMode('pen');
+
         window.addEventListener('resize', () => {
             if (currentFileType === 'pdf') {
                 renderPDFPage(currentPageNum);
@@ -1002,13 +1478,18 @@
                 setCanvasSize(rect.width, rect.width * 1.4);
             }
         });
+
         setTimeout(() => {
             const rect = viewerWrapper.getBoundingClientRect();
             setCanvasSize(rect.width, rect.width * 1.4);
         }, 300);
 
-        console.log('🚀 Trang web PDF/Word nâng cao đã sẵn sàng!');
-        console.log('📌 Tính năng: Vẽ, Lưu PDF, Thêm/Xóa trang');
+        console.log('🚀 Trang web Vẽ Từ Xa đã sẵn sàng!');
+        console.log('📌 Hướng dẫn:');
+        console.log('1. Máy tính: Tải file PDF/Word lên');
+        console.log('2. Bấm "Kết nối" để tạo phòng');
+        console.log('3. Điện thoại: Truy cập cùng trang web, nhập mã phòng và bấm Kết nối');
+        console.log('4. Vẽ trên điện thoại sẽ hiển thị trên máy tính!');
     </script>
 </body>
 </html>
