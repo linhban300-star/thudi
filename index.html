@@ -562,6 +562,12 @@
                     paths = allPagePaths[0] || [];
                     redrawAll();
                 }
+            } else if (data.type === 'view') {
+                // Máy tính chỉnh xem tới đâu thì thiết bị này hiện đúng vị trí đó
+                // (chỉ áp dụng khi đang cùng xem 1 trang, tránh lệch tỉ lệ canvas)
+                if (data.pageIndex === undefined || data.pageIndex === currentPageIndex) {
+                    applyRemoteView(data);
+                }
             }
         }
 
@@ -597,6 +603,30 @@
 
         function sendPageChange(idx) {
             if (conn && conn.open) conn.send({ type: 'page', pageIndex: idx });
+        }
+
+        // Gửi vị trí đang xem (chỉ khi máy tính kéo/lăn chuột) để thiết bị kia hiện đúng vị trí đó
+        function sendViewData() {
+            if (conn && conn.open) {
+                const fitScale = computeFitScale();
+                conn.send({
+                    type: 'view',
+                    pageIndex: currentPageIndex,
+                    centerCanvasX: canvas.width / 2 - viewX / viewScale,
+                    centerCanvasY: canvas.height / 2 - viewY / viewScale,
+                    zoomRatio: viewScale / fitScale
+                });
+            }
+        }
+
+        let viewSyncPending = false;
+        function scheduleSendViewData() {
+            if (viewSyncPending) return;
+            viewSyncPending = true;
+            requestAnimationFrame(function() {
+                sendViewData();
+                viewSyncPending = false;
+            });
         }
 
         function sendFullState() {
@@ -690,7 +720,7 @@
             wrapper.style.transform = 'translate(' + viewX + 'px, ' + viewY + 'px) scale(' + viewScale + ')';
         }
 
-        function resetView() {
+        function computeFitScale() {
             const containerRect = container.getBoundingClientRect();
             const pad = 20;
             const availW = containerRect.width - pad * 2;
@@ -699,10 +729,24 @@
             const scaleY = availH / canvas.height;
             let scale = Math.min(scaleX, scaleY, 3);
             if (!isFinite(scale) || scale <= 0) scale = 1;
-            viewScale = scale;
+            return scale;
+        }
+
+        function resetView() {
+            viewScale = computeFitScale();
             viewX = 0;
             viewY = 0;
             applyTransform(true);
+        }
+
+        // Áp dụng vị trí xem nhận được từ thiết bị kia (quy đổi theo tỉ lệ màn hình riêng của máy này)
+        function applyRemoteView(data) {
+            const fitScale = computeFitScale();
+            const newScale = Math.min(Math.max(fitScale * data.zoomRatio, 0.15), 6);
+            viewScale = newScale;
+            viewX = (canvas.width / 2 - data.centerCanvasX) * viewScale;
+            viewY = (canvas.height / 2 - data.centerCanvasY) * viewScale;
+            applyTransform(false);
         }
 
         function zoomBy(factor) {
@@ -794,11 +838,13 @@
             viewX = panOrigin.x + (e.clientX - panStart.x);
             viewY = panOrigin.y + (e.clientY - panStart.y);
             applyTransform(false);
+            scheduleSendViewData();
         }
         function endPan() {
             if (!isPanning) return;
             isPanning = false;
             canvas.style.cursor = 'grab';
+            sendViewData();
         }
 
         // Events
@@ -814,6 +860,7 @@
         container.addEventListener('wheel', function(e) {
             e.preventDefault();
             zoomAtPoint(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9);
+            scheduleSendViewData();
         }, { passive: false });
 
         // ---------- Redraw ----------
