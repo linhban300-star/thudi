@@ -739,6 +739,17 @@
                 const idx = (data.pageIndex !== undefined) ? data.pageIndex : currentPageIndex;
                 if (allPagePaths[idx] && allPagePaths[idx].length > 0) allPagePaths[idx].pop();
                 if (idx === currentPageIndex) { paths = allPagePaths[idx]; redrawAll(); }
+            } else if (data.type === 'erase' && data.path) {
+                const idx = (data.pageIndex !== undefined) ? data.pageIndex : currentPageIndex;
+                if (!allPagePaths[idx]) allPagePaths[idx] = [];
+                if (idx === currentPageIndex) {
+                    erasePaths(data.path);
+                } else {
+                    allPagePaths[idx] = allPagePaths[idx].filter(function(p) {
+                        return !pathIntersectsEraser(p, data.path);
+                    });
+                }
+                saveStateToStorage();
             } else if (data.type === 'file' && data.pages) {
                 loadFileWithPages(data.pages, data.fileName, data.fileType, true);
             } else if (data.type === 'page') {
@@ -796,6 +807,10 @@
 
         function sendUndoData() {
             if (conn && conn.open) conn.send({ type: 'undo', pageIndex: currentPageIndex });
+        }
+
+        function sendEraseData(path) {
+            if (conn && conn.open) conn.send({ type: 'erase', path: path, pageIndex: currentPageIndex });
         }
 
         function sendFileWithPages(pagesArray, name, type) {
@@ -878,7 +893,8 @@
                 width: currentTool === 'eraser' ? currentWidth * 2 : currentWidth,
                 points: isShapeTool
                     ? [{ x: pos.x, y: pos.y }, { x: pos.x, y: pos.y }]
-                    : [{ x: pos.x, y: pos.y }]
+                    : [{ x: pos.x, y: pos.y }],
+                isPreview: currentTool === 'eraser'
             };
             redrawAll();
         }
@@ -892,12 +908,19 @@
             } else {
                 currentPath.points.push({ x: pos.x, y: pos.y });
             }
+            if (currentPath.tool === 'eraser') {
+                erasePaths(currentPath);
+            }
             redrawAll();
         }
 
         function stopDrawing(e) {
             if (drawing && currentPath) {
-                if (currentPath.points.length > 0) {
+                if (currentTool === 'eraser' && currentPath.points.length > 0) {
+                    erasePaths(currentPath);
+                    if (conn && conn.open) sendEraseData(currentPath);
+                    saveStateToStorage();
+                } else if (currentPath.points.length > 0) {
                     const pathCopy = { ...currentPath, points: [...currentPath.points] };
                     paths.push(pathCopy);
                     if (conn && conn.open) sendDrawData(pathCopy);
@@ -1085,11 +1108,16 @@
         function drawPath(context, path) {
             if (!path.points || path.points.length < 1) return;
             const tool = path.tool || 'pen';
-            const isEraser = tool === 'eraser';
+            const isEraser = tool === 'eraser' && !path.isPreview;
             context.save();
             context.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
-            context.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : path.color;
-            context.fillStyle = isEraser ? 'rgba(0,0,0,1)' : path.color;
+            if (tool === 'eraser' && path.isPreview) {
+                context.strokeStyle = 'rgba(0,0,0,0.25)';
+                context.fillStyle = 'rgba(0,0,0,0.25)';
+            } else {
+                context.strokeStyle = path.color;
+                context.fillStyle = path.color;
+            }
             context.lineWidth = path.width;
             context.lineCap = 'round';
             context.lineJoin = 'round';
@@ -1117,11 +1145,7 @@
                 if (path.points.length === 1) {
                     context.beginPath();
                     context.arc(path.points[0].x, path.points[0].y, path.width / 2, 0, Math.PI * 2);
-                    if (isEraser) {
-                        context.fill();
-                    } else {
-                        context.fill();
-                    }
+                    context.fill();
                 } else {
                     context.beginPath();
                     context.moveTo(path.points[0].x, path.points[0].y);
@@ -1159,6 +1183,73 @@
             const last = points[points.length - 1];
             context.lineTo(last.x, last.y);
             context.stroke();
+        }
+
+        function pointDistance(a, b) {
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            return Math.hypot(dx, dy);
+        }
+
+        function segmentDistance(a, b, c, d) {
+            const vx = b.x - a.x;
+            const vy = b.y - a.y;
+            const wx = d.x - c.x;
+            const wy = d.y - c.y;
+            const dx = c.x - a.x;
+            const dy = c.y - a.y;
+            const c1 = dx * vx + dy * vy;
+            const c2 = vx * vx + vy * vy;
+            if (c2 <= 0) return pointDistance(a, c);
+            let t = c1 / c2;
+            t = Math.max(0, Math.min(1, t));
+            const px = a.x + t * vx;
+            const py = a.y + t * vy;
+            return Math.hypot(px - c.x, py - c.y);
+        }
+
+        function segmentToSegmentDistance(a, b, c, d) {
+            const d1 = segmentDistance(a, b, c, d);
+            const d2 = segmentDistance(c, d, a, b);
+            return Math.min(d1, d2);
+        }
+
+        function pathIntersectsEraser(path, eraser) {
+            if (!path.points || !eraser.points) return false;
+            const threshold = (path.width + eraser.width) / 2 + 10;
+            for (let i = 0; i < path.points.length - 1; i++) {
+                const a = path.points[i];
+                const b = path.points[i + 1];
+                for (let j = 0; j < eraser.points.length - 1; j++) {
+                    const c = eraser.points[j];
+                    const d = eraser.points[j + 1];
+                    if (segmentToSegmentDistance(a, b, c, d) <= threshold) return true;
+                }
+            }
+            if (path.points.length === 1) {
+                for (let j = 0; j < eraser.points.length; j++) {
+                    if (pointDistance(path.points[0], eraser.points[j]) <= threshold) return true;
+                }
+            }
+            if (eraser.points.length === 1) {
+                for (let i = 0; i < path.points.length; i++) {
+                    if (pointDistance(path.points[i], eraser.points[0]) <= threshold) return true;
+                }
+            }
+            return false;
+        }
+
+        function erasePaths(eraser) {
+            const idx = currentPageIndex;
+            if (!allPagePaths[idx]) allPagePaths[idx] = [];
+            const remaining = allPagePaths[idx].filter(function(p) {
+                return !pathIntersectsEraser(p, eraser);
+            });
+            if (remaining.length !== allPagePaths[idx].length) {
+                allPagePaths[idx] = remaining;
+                paths = remaining;
+                redrawAll();
+            }
         }
 
         // ---------- Quản lý file nhiều trang ----------
