@@ -469,7 +469,7 @@
 
         // ---------- State ----------
         let isConnected = false;
-        let peer = null;
+        let peerConnection = null;
         let conn = null;
         let isHost = false;
         let roomCode = '';
@@ -499,10 +499,6 @@
 
         const ROOM_STORAGE_KEY = 'wb-room-code';
         const ROOM_URL_PARAM = 'room';
-
-        function generateRoomCode() {
-            return Math.random().toString(36).substring(2, 8).toUpperCase();
-        }
 
         function persistRoomCode(code) {
             const room = (code || '').trim().toUpperCase();
@@ -558,6 +554,41 @@
             }, delayMs || 2500);
         }
 
+        function connectPeer() {
+            const code = ensureRoomCode();
+            manualDisconnect = false;
+            clearReconnectTimer();
+            clearConnectAttemptTimer();
+            teardownPeer();
+            statusText.textContent = '⏳ Đang kết nối...';
+
+            // Thử làm client trước rồi nếu không kết nối được thì chuyển sang host
+            peer = new Peer(undefined, { debug: 0 });
+            peer.on('open', function() {
+                tryClientConnect(code);
+            });
+            peer.on('disconnected', function() {
+                if (!manualDisconnect) {
+                    try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
+                }
+            });
+            peer.on('error', function(err) {
+                if (!manualDisconnect && !isConnected && (err.type === 'peer-unavailable' || err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error')) {
+                    startHostPeer(code);
+                } else {
+                    statusText.textContent = '❌ Lỗi kết nối';
+                    setConnection(false);
+                    if (!manualDisconnect) scheduleReconnect(3000);
+                }
+            });
+
+            connectAttemptTimer = setTimeout(function() {
+                if (!manualDisconnect && !isConnected && (!conn || !conn.open)) {
+                    startHostPeer(code);
+                }
+            }, 1800);
+        }
+
         function startHostPeer(code) {
             clearConnectAttemptTimer();
             if (peer && !peer.destroyed && isHost) return;
@@ -581,69 +612,18 @@
                 }
             });
             peer.on('error', function(err) {
-                if (err.type === 'unavailable-id') {
-                    if (peer) {
-                        try { peer.destroy(); } catch (e) {}
-                    }
-                    isHost = false;
-                    startClientPeer(code);
-                } else {
-                    statusText.textContent = '❌ Lỗi: ' + err.type;
-                    setConnection(false);
-                    if (!manualDisconnect) scheduleReconnect(3000);
-                }
-            });
-        }
-
-        function connectPeer() {
-            const code = ensureRoomCode();
-            manualDisconnect = false;
-            clearReconnectTimer();
-            clearConnectAttemptTimer();
-            teardownPeer();
-            statusText.textContent = '⏳ Đang kết nối...';
-
-            startClientPeer(code);
-            connectAttemptTimer = setTimeout(function() {
-                if (!manualDisconnect && !isConnected && (!conn || !conn.open)) {
-                    startHostPeer(code);
-                }
-            }, 1800);
-        }
-
-        // Tạo peer đóng vai "client" và nối vào phòng theo mã code
-        function startClientPeer(code) {
-            peer = new Peer(undefined, { debug: 0 });
-            peer.on('open', function() {
-                tryClientConnect(code);
-            });
-            peer.on('disconnected', function() {
-                if (!manualDisconnect) {
-                    try { peer.reconnect(); } catch (e) { scheduleReconnect(3000); }
-                }
-            });
-            peer.on('error', function(err) {
-                if (!manualDisconnect && !isConnected && (err.type === 'peer-unavailable' || err.type === 'server-error' || err.type === 'network' || err.type === 'socket-error')) {
-                    clearConnectAttemptTimer();
-                    startHostPeer(code);
-                } else {
-                    statusText.textContent = '❌ Lỗi kết nối';
-                    setConnection(false);
-                    if (!manualDisconnect) scheduleReconnect(3000);
-                }
+                statusText.textContent = '❌ Lỗi: ' + err.type;
+                setConnection(false);
+                if (!manualDisconnect) scheduleReconnect(3000);
             });
         }
 
         function tryClientConnect(code) {
             if (manualDisconnect || !peer) return;
             conn = peer.connect('wb-' + code, { reliable: true });
-            conn.on('open', function() {
-                clearConnectAttemptTimer();
-                wireConnection();
-            });
-            conn.on('error', function(err) {
+            conn.on('open', wireConnection);
+            conn.on('error', function() {
                 if (!manualDisconnect && !isConnected) {
-                    clearConnectAttemptTimer();
                     startHostPeer(code);
                 } else {
                     statusText.textContent = '❌ Không thể kết nối tới phòng';
@@ -673,8 +653,6 @@
                 if (manualDisconnect) {
                     statusText.textContent = '⛔ Đã ngắt';
                 } else {
-                    // Thiết bị kia bị out nhưng nội dung ở đây (file + nét vẽ) vẫn được giữ nguyên,
-                    // tự động thử kết nối lại — khi nối lại thành công sẽ hiển thị nội dung ngay lập tức
                     statusText.textContent = '🔄 Thiết bị kia bị mất kết nối — đang tự động nối lại...';
                     scheduleReconnect(1500);
                 }
@@ -686,12 +664,9 @@
                     scheduleReconnect(1500);
                 }
             });
-            // Nếu là host, gửi luôn trạng thái hiện tại (nét vẽ + file) cho máy vừa nối vào
-            // -> thiết bị vừa kết nối lại (dù là host hay client) đều thấy nội dung hiện ra NGAY LẬP TỨC
             if (isHost) {
                 sendFullState();
             } else {
-                // Client cũng chủ động xin lại trạng thái mới nhất từ host để chắc chắn không bị thiếu nội dung
                 requestStateSync();
             }
         }
