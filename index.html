@@ -485,6 +485,7 @@
         let fileState = null;    // { name, type, pages: [{dataURL, width, height}, ...] }
         let currentPageIndex = 0;
         let allPagePaths = [];   // mảng song song với fileState.pages, mỗi phần tử là mảng path của trang đó
+        let pendingPageIndex = null;
 
         // Trạng thái xem: phóng to/thu nhỏ + di chuyển (pan) bằng cử chỉ, không dùng scroll trình duyệt
         let viewScale = 1;
@@ -533,12 +534,11 @@
                 if (saved && saved.fileState && saved.fileState.pages) {
                     fileState = saved.fileState;
                     allPagePaths = Array.isArray(saved.allPagePaths) ? saved.allPagePaths : [];
-                    currentPageIndex = Math.min(saved.currentPageIndex || 0, fileState.pages.length - 1);
+                    currentPageIndex = (saved.currentPageIndex !== undefined) ? Math.min(saved.currentPageIndex, fileState.pages.length - 1) : 0;
                     if (!allPagePaths || allPagePaths.length !== fileState.pages.length) {
                         allPagePaths = fileState.pages.map((_, idx) => (saved.allPagePaths && saved.allPagePaths[idx]) ? saved.allPagePaths[idx] : []);
                     }
-                    loadFileWithPages(fileState.pages, fileState.name, fileState.type, false);
-                    showPage(currentPageIndex, true);
+                    loadFileWithPages(fileState.pages, fileState.name, fileState.type, false, currentPageIndex);
                 } else if (saved && saved.blankBoard) {
                     fileState = null;
                     allPagePaths = [];
@@ -742,16 +742,23 @@
             } else if (data.type === 'file' && data.pages) {
                 loadFileWithPages(data.pages, data.fileName, data.fileType, true);
             } else if (data.type === 'page') {
-                showPage(data.pageIndex);
+                if (fileState && fileState.pages && fileState.pages[data.pageIndex]) {
+                    showPage(data.pageIndex);
+                    saveStateToStorage();
+                } else {
+                    pendingPageIndex = data.pageIndex;
+                }
             } else if (data.type === 'state') {
                 allPagePaths = data.allPagePaths || [];
                 if (data.fileState) {
-                    fileState = data.fileState;
-                    showPage(data.currentPageIndex || 0);
+                    const startPage = (data.currentPageIndex !== undefined) ? data.currentPageIndex : 0;
+                    loadFileWithPages(data.fileState.pages, data.fileState.name, data.fileState.type, false, startPage);
+                    pendingPageIndex = null;
                 } else {
                     fileState = null;
                     paths = allPagePaths[0] || [];
                     redrawAll();
+                    saveStateToStorage();
                 }
             } else if (data.type === 'view') {
                 // Máy tính chỉnh xem tới đâu thì thiết bị này hiện đúng vị trí đó
@@ -1167,7 +1174,7 @@
         }
 
         // Nạp 1 file gồm nhiều trang. resetPaths=true khi đây là file MỚI (xóa nét vẽ cũ vì không còn khớp nội dung)
-        function loadFileWithPages(pagesArray, name, type, resetPaths) {
+        function loadFileWithPages(pagesArray, name, type, resetPaths, startPageIndex = 0) {
             if (resetPaths === undefined) resetPaths = true;
             fileState = { name: name, type: type, pages: pagesArray };
             if (resetPaths || !allPagePaths || allPagePaths.length !== pagesArray.length) {
@@ -1175,7 +1182,7 @@
             }
             fileName.textContent = name;
             fileIcon.className = 'fas ' + iconForType(type);
-            showPage(0, true);
+            showPage(Math.min(Math.max(startPageIndex, 0), pagesArray.length - 1), true);
             saveStateToStorage();
         }
 
@@ -1198,6 +1205,11 @@
                 resetView();
                 updatePageIndicator();
                 saveStateToStorage();
+                if (pendingPageIndex !== null && pendingPageIndex !== currentPageIndex && fileState && fileState.pages[pendingPageIndex]) {
+                    const nextPage = pendingPageIndex;
+                    pendingPageIndex = null;
+                    showPage(nextPage);
+                }
             };
             img.onerror = function() {
                 alert('Không thể hiển thị trang. Vui lòng thử lại.');
