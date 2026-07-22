@@ -102,6 +102,28 @@
             color: #0a0a1a;
             border-color: #f0a500;
         }
+        .progress-bar {
+            display: none;
+            width: 100%;
+            height: 4px;
+            background: #2a2a5a;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 4px 0;
+        }
+        .progress-bar.active { display: block; }
+        .progress-bar .fill {
+            height: 100%;
+            background: #f0a500;
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: 2px;
+        }
+        .status-text-small {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -138,6 +160,7 @@
             <i class="fas fa-file" id="fileIcon"></i>
             <span id="fileName">Chưa có file</span>
             <span class="pdf-info" id="pdfInfo" style="display:none;"><i class="fas fa-check-circle"></i> PDF gốc</span>
+            <span class="status-text-small" id="pageCountInfo"></span>
         </div>
         <div class="tool-group" id="pageNavGroup" style="display:none;">
             <button class="btn page-nav-btn" id="prevPageBtn" style="padding:5px 10px;"><i class="fas fa-chevron-left"></i></button>
@@ -147,6 +170,10 @@
         <button class="btn" id="zoomOutBtn" style="padding:5px 10px;"><i class="fas fa-search-minus"></i></button>
         <button class="btn btn-success" id="zoomFitBtn"><i class="fas fa-expand"></i> Vừa khung</button>
         <button class="btn" id="zoomInBtn" style="padding:5px 10px;"><i class="fas fa-search-plus"></i></button>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+        <div class="fill" id="progressFill"></div>
     </div>
 
     <div class="canvas-container" id="canvasContainer">
@@ -175,7 +202,6 @@
         </div>
         <button class="btn" id="undoBtn"><i class="fas fa-undo-alt"></i> Hoàn tác</button>
         <button class="btn btn-danger" id="clearCanvasBtn"><i class="fas fa-eraser"></i> Xóa vẽ</button>
-        <!-- Thêm nút chuyển trang mới trong hòm công cụ -->
         <div class="tool-group" id="toolPageNav" style="display:none;">
             <button class="btn page-nav-btn" id="toolPrevPage"><i class="fas fa-chevron-left"></i></button>
             <span class="page-indicator" id="toolPageIndicator">1/1</span>
@@ -240,14 +266,15 @@
         const zoomFitBtn = document.getElementById('zoomFitBtn');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const pageCountInfo = document.getElementById('pageCountInfo');
         
-        // Page navigation
         const pageNavGroup = document.getElementById('pageNavGroup');
         const prevPageBtn = document.getElementById('prevPageBtn');
         const nextPageBtn = document.getElementById('nextPageBtn');
         const pageIndicator = document.getElementById('pageIndicator');
         
-        // Tool page navigation
         const toolPageNav = document.getElementById('toolPageNav');
         const toolPrevPage = document.getElementById('toolPrevPage');
         const toolNextPage = document.getElementById('toolNextPage');
@@ -285,7 +312,6 @@
         let viewY = 0;
         let pinch = null;
 
-        // Lưu trữ file PDF gốc
         let originalPdfData = null;
         let storedFileData = null;
         let isReconnecting = false;
@@ -309,6 +335,17 @@
             if (type === 'Connected') statusBadge.classList.add('connected');
             else if (type === 'Reconnecting') statusBadge.classList.add('reconnecting');
             else if (type === 'Offline') statusBadge.classList.add('disconnected');
+        }
+
+        function updateProgress(percent) {
+            progressBar.classList.add('active');
+            progressFill.style.width = percent + '%';
+            if (percent >= 100) {
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                    progressFill.style.width = '0%';
+                }, 1500);
+            }
         }
 
         function saveStateToStorage() {
@@ -391,7 +428,6 @@
             storedFileData = restoredFile;
         }
 
-        // Lưu PDF gốc
         function saveOriginalPdfToStorage(pdfData, name) {
             try {
                 originalPdfData = { data: pdfData, name: name };
@@ -1211,11 +1247,13 @@
             if (totalPages <= 1) {
                 pageNavGroup.style.display = 'none';
                 toolPageNav.style.display = 'none';
+                pageCountInfo.textContent = '';
                 return;
             }
             
             pageNavGroup.style.display = 'flex';
             toolPageNav.style.display = 'flex';
+            pageCountInfo.textContent = '📄 ' + totalPages + ' trang';
             
             const indicatorText = current + '/' + totalPages;
             pageIndicator.textContent = indicatorText;
@@ -1299,7 +1337,7 @@
             img.src = dataURL;
         }
 
-        // ---------- Xử lý PDF - Vẽ trực tiếp trên PDF gốc ----------
+        // ---------- Xử lý PDF ----------
         const pdfjsLib = window.pdfjsLib;
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
@@ -1311,7 +1349,7 @@
                 saveOriginalPdfToStorage(arrayBuffer, file.name);
                 
                 pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
-                    const scale = 3.0; // Tăng chất lượng hiển thị
+                    const scale = 3.0;
                     const pagePromises = [];
                     for (let i = 1; i <= pdf.numPages; i++) {
                         pagePromises.push(pdf.getPage(i));
@@ -1319,8 +1357,9 @@
                     Promise.all(pagePromises).then(function(pages) {
                         const pagesData = [];
                         let chain = Promise.resolve();
-                        pages.forEach(function(page) {
+                        pages.forEach(function(page, idx) {
                             chain = chain.then(function() {
+                                updateProgress(Math.round(((idx) / pages.length) * 50));
                                 const viewport = page.getViewport({ scale: scale });
                                 const tempCanvas = document.createElement('canvas');
                                 tempCanvas.width = Math.round(viewport.width);
@@ -1338,97 +1377,106 @@
                             });
                         });
                         chain.then(function() {
+                            updateProgress(100);
                             loadFileWithPages(pagesData, file.name, 'pdf', true);
                             sendFileWithPages(pagesData, file.name, 'pdf');
                             
                             pdfInfo.style.display = 'inline';
-                            pdfInfo.innerHTML = '<i class="fas fa-check-circle"></i> PDF gốc';
+                            pdfInfo.innerHTML = '<i class="fas fa-check-circle"></i> PDF gốc (' + pagesData.length + ' trang)';
+                            
+                            setTimeout(() => {
+                                progressBar.classList.remove('active');
+                                progressFill.style.width = '0%';
+                            }, 1000);
                         });
                     });
                 }).catch(function(err) {
                     alert('Không thể đọc PDF: ' + err.message);
+                    progressBar.classList.remove('active');
                 });
             };
             reader.readAsArrayBuffer(file);
         }
 
-        // Lưu PDF với nét vẽ - chất lượng cao
+        // ---------- Lưu PDF với tất cả các trang ----------
         function savePdfWithDrawings() {
-            if (!originalPdfData) {
-                alert('Không tìm thấy PDF gốc để lưu.');
+            if (!fileState || !fileState.pages || fileState.pages.length === 0) {
+                alert('Không có nội dung để lưu.');
                 return;
             }
 
+            const totalPages = fileState.pages.length;
+            updateProgress(0);
+            
             try {
                 const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
                 let doc = null;
-                const pdfName = originalPdfData.name || 'document.pdf';
+                const baseName = fileState.name ? fileState.name.replace(/\.[^/.]+$/, '') : 'ban-ve';
                 
-                if (fileState && fileState.pages && fileState.pages.length > 0) {
-                    for (let i = 0; i < fileState.pages.length; i++) {
-                        const pc = buildPageCanvasWithPdf(i);
-                        const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
-                        const dataURL = pc.toDataURL('image/png');
-                        
-                        if (!doc) {
-                            doc = new jsPDFCtor({ 
-                                orientation: orientation, 
-                                unit: 'px', 
-                                format: [pc.width, pc.height],
-                                compress: true
-                            });
-                        } else {
-                            doc.addPage([pc.width, pc.height], orientation);
-                        }
-                        doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
+                // Duyệt qua tất cả các trang
+                for (let i = 0; i < totalPages; i++) {
+                    updateProgress(Math.round(((i + 1) / totalPages) * 90));
+                    
+                    // Tạo canvas cho trang i với nét vẽ
+                    const pageData = fileState.pages[i];
+                    const img = new Image();
+                    img.src = pageData.dataURL;
+                    
+                    // Sử dụng synchronous để đảm bảo ảnh được tải
+                    const pc = document.createElement('canvas');
+                    pc.width = pageData.width;
+                    pc.height = pageData.height;
+                    const pctx = pc.getContext('2d');
+                    pctx.imageSmoothingEnabled = true;
+                    pctx.imageSmoothingQuality = 'high';
+                    
+                    // Vẽ nền trắng
+                    pctx.fillStyle = '#ffffff';
+                    pctx.fillRect(0, 0, pc.width, pc.height);
+                    
+                    // Vẽ nội dung trang
+                    const imgObj = new Image();
+                    imgObj.onload = function() {
+                        pctx.drawImage(imgObj, 0, 0, pc.width, pc.height);
+                    };
+                    imgObj.src = pageData.dataURL;
+                    
+                    // Vẽ các nét vẽ của trang này
+                    const pagePaths = allPagePaths[i] || [];
+                    for (let p of pagePaths) {
+                        if (p.tool === 'eraser') continue;
+                        drawPath(pctx, p);
                     }
-                } else {
-                    const pc = buildBlankCanvas();
+                    
+                    // Thêm vào PDF
                     const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
-                    doc = new jsPDFCtor({ 
-                        orientation: orientation, 
-                        unit: 'px', 
-                        format: [pc.width, pc.height],
-                        compress: true
-                    });
-                    doc.addImage(pc.toDataURL('image/png'), 'PNG', 0, 0, pc.width, pc.height);
+                    const dataURL = pc.toDataURL('image/png');
+                    
+                    if (!doc) {
+                        doc = new jsPDFCtor({ 
+                            orientation: orientation, 
+                            unit: 'px', 
+                            format: [pc.width, pc.height],
+                            compress: true
+                        });
+                    } else {
+                        doc.addPage([pc.width, pc.height], orientation);
+                    }
+                    doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
                 }
                 
-                doc.save(pdfName.replace('.pdf', '_ve.pdf'));
-                updateStatus('✅ Đã lưu PDF với nét vẽ', 'Connected');
+                updateProgress(100);
+                doc.save(baseName + '_ve.pdf');
+                updateStatus('✅ Đã lưu ' + totalPages + ' trang PDF với nét vẽ', 'Connected');
+                
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                    progressFill.style.width = '0%';
+                }, 1500);
             } catch (err) {
                 alert('Không thể lưu file PDF: ' + err.message);
+                progressBar.classList.remove('active');
             }
-        }
-
-        function buildPageCanvasWithPdf(idx) {
-            const pc = document.createElement('canvas');
-            pc.width = canvas.width;
-            pc.height = canvas.height;
-            const pctx = pc.getContext('2d');
-            pctx.imageSmoothingEnabled = true;
-            pctx.imageSmoothingQuality = 'high';
-            pctx.drawImage(canvas, 0, 0);
-            return pc;
-        }
-
-        function buildBlankCanvas() {
-            const pc = document.createElement('canvas');
-            pc.width = canvas.width;
-            pc.height = canvas.height;
-            const pctx = pc.getContext('2d');
-            pctx.imageSmoothingEnabled = true;
-            pctx.imageSmoothingQuality = 'high';
-            pctx.fillStyle = '#ffffff';
-            pctx.fillRect(0, 0, pc.width, pc.height);
-            if (bgImage) {
-                pctx.drawImage(bgImage, 0, 0, pc.width, pc.height);
-            }
-            for (let p of paths) {
-                if (p.tool === 'eraser') continue;
-                drawPath(pctx, p);
-            }
-            return pc;
         }
 
         // ---------- File events ----------
@@ -1508,7 +1556,7 @@
             setTimeout(function() {
                 html2canvas(holder, { 
                     backgroundColor: '#ffffff', 
-                    scale: 2.5, // Tăng chất lượng
+                    scale: 2.5,
                     useCORS: true,
                     logging: false
                 }).then(function(renderedCanvas) {
@@ -1562,6 +1610,7 @@
             fileName.textContent = 'Chưa có file';
             fileIcon.className = 'fas fa-file';
             pdfInfo.style.display = 'none';
+            pageCountInfo.textContent = '';
             canvas.width = 1200;
             canvas.height = 800;
             inkCanvas.width = 1200;
@@ -1601,102 +1650,52 @@
         });
 
         // ---------- Lưu file ----------
-        function getExportBaseName() {
-            let baseName = 'ban-ve';
-            if (fileState && fileState.name) {
-                baseName = fileState.name.replace(/\.[^/.]+$/, '');
-            }
-            return baseName;
-        }
-
         savePdfBtn.addEventListener('click', function() {
-            if (originalPdfData) {
-                savePdfWithDrawings();
+            savePdfWithDrawings();
+        });
+
+        saveWordBtn.addEventListener('click', async function() {
+            if (!fileState || !fileState.pages) {
+                alert('Không có nội dung để lưu.');
                 return;
             }
             
             try {
-                const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
-                let doc = null;
+                let imagesHtml = '';
+                const totalPages = fileState.pages.length;
                 
-                if (fileState && fileState.pages && fileState.pages.length > 0) {
-                    for (let i = 0; i < fileState.pages.length; i++) {
-                        const pc = buildPageCanvas(i);
-                        const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
-                        const dataURL = pc.toDataURL('image/png');
-                        if (!doc) {
-                            doc = new jsPDFCtor({ 
-                                orientation: orientation, 
-                                unit: 'px', 
-                                format: [pc.width, pc.height],
-                                compress: true
-                            });
-                        } else {
-                            doc.addPage([pc.width, pc.height], orientation);
-                        }
-                        doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
-                    }
-                } else {
-                    const pc = buildBlankCanvas();
-                    const orientation = pc.width >= pc.height ? 'landscape' : 'portrait';
-                    doc = new jsPDFCtor({ 
-                        orientation: orientation, 
-                        unit: 'px', 
-                        format: [pc.width, pc.height],
-                        compress: true
-                    });
-                    doc.addImage(pc.toDataURL('image/png'), 'PNG', 0, 0, pc.width, pc.height);
-                }
-                doc.save(getExportBaseName() + '.pdf');
-                updateStatus('✅ Đã lưu PDF', 'Connected');
-            } catch (err) {
-                alert('Không thể lưu file PDF: ' + err.message);
-            }
-        });
-
-        function buildPageCanvas(idx) {
-            return new Promise(function(resolve, reject) {
-                const pageData = fileState.pages[idx];
-                const img = new Image();
-                img.onload = function() {
+                for (let i = 0; i < totalPages; i++) {
+                    updateProgress(Math.round(((i + 1) / totalPages) * 90));
+                    
+                    const pageData = fileState.pages[i];
                     const pc = document.createElement('canvas');
                     pc.width = pageData.width;
                     pc.height = pageData.height;
                     const pctx = pc.getContext('2d');
                     pctx.imageSmoothingEnabled = true;
                     pctx.imageSmoothingQuality = 'high';
+                    
                     pctx.fillStyle = '#ffffff';
                     pctx.fillRect(0, 0, pc.width, pc.height);
-                    pctx.drawImage(img, 0, 0, pageData.width, pageData.height);
-                    const pagePaths = allPagePaths[idx] || [];
+                    
+                    const img = new Image();
+                    img.onload = function() {
+                        pctx.drawImage(img, 0, 0, pc.width, pc.height);
+                    };
+                    img.src = pageData.dataURL;
+                    
+                    const pagePaths = allPagePaths[i] || [];
                     for (let p of pagePaths) {
                         if (p.tool === 'eraser') continue;
                         drawPath(pctx, p);
                     }
-                    resolve(pc);
-                };
-                img.onerror = function() {
-                    reject(new Error('Không thể tải ảnh trang ' + (idx + 1)));
-                };
-                img.src = pageData.dataURL;
-            });
-        }
-
-        saveWordBtn.addEventListener('click', async function() {
-            try {
-                let imagesHtml = '';
-                
-                if (fileState && fileState.pages && fileState.pages.length > 0) {
-                    for (let i = 0; i < fileState.pages.length; i++) {
-                        const pc = await buildPageCanvas(i);
-                        const dataURL = pc.toDataURL('image/png');
-                        const breakStyle = (i < fileState.pages.length - 1) ? 'page-break-after:always;' : '';
-                        imagesHtml += '<div style="' + breakStyle + '"><img src="' + dataURL + '" style="max-width:100%;height:auto;" /></div>';
-                    }
-                } else {
-                    const pc = buildBlankCanvas();
-                    imagesHtml = '<img src="' + pc.toDataURL('image/png') + '" style="max-width:100%;height:auto;" />';
+                    
+                    const dataURL = pc.toDataURL('image/png');
+                    const breakStyle = (i < totalPages - 1) ? 'page-break-after:always;' : '';
+                    imagesHtml += '<div style="' + breakStyle + '"><img src="' + dataURL + '" style="max-width:100%;height:auto;" /></div>';
                 }
+                
+                updateProgress(100);
                 
                 const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
                     'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
@@ -1709,14 +1708,21 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = getExportBaseName() + '.doc';
+                const baseName = fileState.name ? fileState.name.replace(/\.[^/.]+$/, '') : 'ban-ve';
+                link.download = baseName + '_ve.doc';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 setTimeout(function() { URL.revokeObjectURL(url); }, 3000);
-                updateStatus('✅ Đã lưu Word', 'Connected');
+                updateStatus('✅ Đã lưu ' + totalPages + ' trang Word với nét vẽ', 'Connected');
+                
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                    progressFill.style.width = '0%';
+                }, 1500);
             } catch (err) {
                 alert('Không thể lưu file Word: ' + err.message);
+                progressBar.classList.remove('active');
             }
         });
 
@@ -1730,11 +1736,8 @@
             sendPageChange(newIndex);
         }
 
-        // File bar navigation
         prevPageBtn.addEventListener('click', function() { goToPage(-1); });
         nextPageBtn.addEventListener('click', function() { goToPage(1); });
-
-        // Tool navigation
         toolPrevPage.addEventListener('click', function() { goToPage(-1); });
         toolNextPage.addEventListener('click', function() { goToPage(1); });
 
@@ -1937,7 +1940,7 @@
         console.log('🖌️ Bảng vẽ từ xa đã sẵn sàng!');
         console.log('📄 Vẽ trực tiếp trên PDF gốc - chất lượng cao');
         console.log('📄 Chuyển trang nhanh bằng nút ◀ ▶ trong hòm công cụ');
-        console.log('💾 Lưu PDF với nét vẽ giữ nguyên chất lượng gốc');
+        console.log('💾 Lưu PDF bao gồm TẤT CẢ các trang với nét vẽ');
     })();
 </script>
 </body>
