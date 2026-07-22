@@ -1399,7 +1399,7 @@
         }
 
         // ---------- Lưu PDF với tất cả các trang ----------
-        function savePdfWithDrawings() {
+        async function savePdfWithDrawings() {
             if (!fileState || !fileState.pages || fileState.pages.length === 0) {
                 alert('Không có nội dung để lưu.');
                 return;
@@ -1419,10 +1419,8 @@
                     
                     // Tạo canvas cho trang i với nét vẽ
                     const pageData = fileState.pages[i];
-                    const img = new Image();
-                    img.src = pageData.dataURL;
                     
-                    // Sử dụng synchronous để đảm bảo ảnh được tải
+                    // Tạo canvas mới
                     const pc = document.createElement('canvas');
                     pc.width = pageData.width;
                     pc.height = pageData.height;
@@ -1434,12 +1432,18 @@
                     pctx.fillStyle = '#ffffff';
                     pctx.fillRect(0, 0, pc.width, pc.height);
                     
-                    // Vẽ nội dung trang
-                    const imgObj = new Image();
-                    imgObj.onload = function() {
-                        pctx.drawImage(imgObj, 0, 0, pc.width, pc.height);
-                    };
-                    imgObj.src = pageData.dataURL;
+                    // Vẽ nội dung trang từ image
+                    await new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = function() {
+                            pctx.drawImage(img, 0, 0, pc.width, pc.height);
+                            resolve();
+                        };
+                        img.onerror = function() {
+                            resolve();
+                        };
+                        img.src = pageData.dataURL;
+                    });
                     
                     // Vẽ các nét vẽ của trang này
                     const pagePaths = allPagePaths[i] || [];
@@ -1678,11 +1682,18 @@
                     pctx.fillStyle = '#ffffff';
                     pctx.fillRect(0, 0, pc.width, pc.height);
                     
-                    const img = new Image();
-                    img.onload = function() {
-                        pctx.drawImage(img, 0, 0, pc.width, pc.height);
-                    };
-                    img.src = pageData.dataURL;
+                    // Vẽ nội dung trang
+                    await new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = function() {
+                            pctx.drawImage(img, 0, 0, pc.width, pc.height);
+                            resolve();
+                        };
+                        img.onerror = function() {
+                            resolve();
+                        };
+                        img.src = pageData.dataURL;
+                    });
                     
                     const pagePaths = allPagePaths[i] || [];
                     for (let p of pagePaths) {
