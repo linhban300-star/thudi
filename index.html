@@ -87,49 +87,19 @@
         .status-badge.disconnected { border-color: #ff4757; color: #ff4757; }
         .status-badge.reconnecting { border-color: #f0a500; color: #f0a500; animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .pdf-info {
-            font-size: 0.7rem;
-            opacity: 0.6;
-            margin-left: 8px;
-        }
+        .pdf-info { font-size: 0.7rem; opacity: 0.6; margin-left: 8px; }
         .pdf-info i { color: #f0a500; }
-        .page-nav-btn {
-            padding: 4px 8px;
-            font-size: 0.7rem;
-        }
-        .page-nav-btn.active {
-            background: #f0a500;
-            color: #0a0a1a;
-            border-color: #f0a500;
-        }
-        .progress-bar {
-            display: none;
-            width: 100%;
-            height: 4px;
-            background: #2a2a5a;
-            border-radius: 2px;
-            overflow: hidden;
-            margin: 4px 0;
-        }
+        .page-nav-btn { padding: 4px 8px; font-size: 0.7rem; }
+        .page-nav-btn.active { background: #f0a500; color: #0a0a1a; border-color: #f0a500; }
+        .progress-bar { display: none; width: 100%; height: 4px; background: #2a2a5a; border-radius: 2px; overflow: hidden; margin: 4px 0; }
         .progress-bar.active { display: block; }
-        .progress-bar .fill {
-            height: 100%;
-            background: #f0a500;
-            width: 0%;
-            transition: width 0.3s;
-            border-radius: 2px;
-        }
-        .status-text-small {
-            font-size: 0.7rem;
-            opacity: 0.7;
-            margin-left: 8px;
-        }
-        /* Loading overlay cho Android */
+        .progress-bar .fill { height: 100%; background: #f0a500; width: 0%; transition: width 0.3s; border-radius: 2px; }
+        .status-text-small { font-size: 0.7rem; opacity: 0.7; margin-left: 8px; }
         .loading-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.85);
             z-index: 9999;
             align-items: center;
             justify-content: center;
@@ -146,25 +116,16 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-overlay .text {
-            color: #fff;
-            font-size: 0.9rem;
-            text-align: center;
-            max-width: 80%;
-        }
-        .loading-overlay .sub-text {
-            color: #aaa;
-            font-size: 0.75rem;
-        }
+        .loading-overlay .text { color: #fff; font-size: 0.9rem; text-align: center; max-width: 80%; }
+        .loading-overlay .sub-text { color: #aaa; font-size: 0.75rem; }
     </style>
 </head>
 <body>
 <div class="app">
-    <!-- Loading Overlay cho Android -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
-        <div class="text" id="loadingText">⏳ Đang tải file...</div>
-        <div class="sub-text" id="loadingSubText">Vui lòng đợi, không tắt trình duyệt</div>
+        <div class="text" id="loadingText">⏳ Đang tải...</div>
+        <div class="sub-text" id="loadingSubText">Vui lòng đợi</div>
     </div>
 
     <div class="header">
@@ -260,7 +221,6 @@
         <li><strong>Bước 2:</strong> Nhấn <strong>"Copy link"</strong> rồi gửi link đó qua điện thoại (Zalo, tin nhắn...)</li>
         <li><strong>Bước 3:</strong> Mở link đó trên <strong>Điện thoại</strong> — app tự nhận đúng Mã phòng và tự kết nối</li>
         <li><strong>Bước 4:</strong> Vẽ trên thiết bị nào cũng đồng bộ ngay lập tức</li>
-        <li><strong>Lưu ý:</strong> PDF giữ nguyên chất lượng gốc khi vẽ trực tiếp</li>
     </ul>
 </div>
 
@@ -360,7 +320,6 @@
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 50;
         
-        // Phát hiện thiết bị di động
         const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const isAndroid = /Android/i.test(navigator.userAgent);
 
@@ -380,11 +339,16 @@
             if (subText) loadingSubText.textContent = subText;
         }
 
-        // ---------- PeerJS ----------
+        // ---------- PeerJS - Tối ưu cho Android ----------
         let manualDisconnect = true;
         let reconnectTimer = null;
         let reconnectDelay = 500;
         const DEFAULT_ROOM_CODE = 'WBROOM';
+        
+        // Giới hạn tần suất gửi dữ liệu
+        let sendQueue = [];
+        let sendTimer = null;
+        const SEND_INTERVAL = isAndroid ? 100 : 50; // Android gửi chậm hơn
 
         function clearReconnectTimer() {
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -563,7 +527,18 @@
             teardownPeer();
             updateStatus('⏳ Đang kết nối...', 'Reconnecting');
 
-            peer = new Peer('wb-' + code, { debug: 0 });
+            // Tối ưu PeerJS cho Android
+            const peerOptions = { 
+                debug: 0,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            };
+
+            peer = new Peer('wb-' + code, peerOptions);
 
             peer.on('open', function() {
                 isHost = true;
@@ -601,7 +576,16 @@
         }
 
         function startClientPeer(code) {
-            peer = new Peer(undefined, { debug: 0 });
+            const peerOptions = {
+                debug: 0,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            };
+            peer = new Peer(undefined, peerOptions);
             peer.on('open', function() {
                 tryClientConnect(code);
             });
@@ -620,14 +604,17 @@
 
         function tryClientConnect(code) {
             if (manualDisconnect || !peer) return;
-            conn = peer.connect('wb-' + code, { reliable: true });
+            conn = peer.connect('wb-' + code, { 
+                reliable: true,
+                serialization: 'json'
+            });
             let connectTimeout = setTimeout(function() {
                 if (conn && !conn.open) {
                     try { conn.close(); } catch(e) {}
                     updateStatus('⏱️ Kết nối quá thời gian', 'Reconnecting');
                     if (!manualDisconnect) scheduleReconnect(1000);
                 }
-            }, 10000);
+            }, 15000);
             conn.on('open', function() {
                 clearTimeout(connectTimeout);
                 wireConnection();
@@ -657,7 +644,16 @@
                         }, 3000);
                     }
                 } else {
-                    peer = new Peer('wb-' + roomCode, { debug: 0 });
+                    const peerOptions = {
+                        debug: 0,
+                        config: {
+                            iceServers: [
+                                { urls: 'stun:stun.l.google.com:19302' },
+                                { urls: 'stun:stun1.l.google.com:19302' }
+                            ]
+                        }
+                    };
+                    peer = new Peer('wb-' + roomCode, peerOptions);
                     peer.on('open', function() {
                         isHost = true;
                         updateStatus('📡 Phòng ' + roomCode + ' — chờ thiết bị kia...', 'Connected');
@@ -714,7 +710,10 @@
                 }
             });
             if (isHost) {
-                sendFullState();
+                // Gửi state sau khi kết nối
+                setTimeout(function() {
+                    sendFullState();
+                }, 500);
             } else {
                 requestStateSync();
             }
@@ -816,6 +815,8 @@
             if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
             isHost = false;
             isReconnecting = false;
+            if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+            sendQueue = [];
         }
 
         function disconnectPeer() {
@@ -827,20 +828,43 @@
             updateStatus('⛔ Đã ngắt', 'Offline');
         }
 
+        // ---------- Gửi dữ liệu có hàng đợi ----------
+        function sendData(data) {
+            if (!conn || !conn.open) return;
+            sendQueue.push(data);
+            if (!sendTimer) {
+                sendTimer = setTimeout(function() {
+                    sendTimer = null;
+                    if (sendQueue.length > 0 && conn && conn.open) {
+                        // Gộp nhiều tin nhắn thành 1 nếu có nhiều
+                        if (sendQueue.length > 5) {
+                            const batch = { type: 'batch', data: sendQueue.slice() };
+                            conn.send(batch);
+                        } else {
+                            for (let item of sendQueue) {
+                                conn.send(item);
+                            }
+                        }
+                        sendQueue = [];
+                    }
+                }, SEND_INTERVAL);
+            }
+        }
+
         function sendDrawData(path) {
-            if (conn && conn.open) conn.send({ type: 'draw', path: path, pageIndex: currentPageIndex });
+            sendData({ type: 'draw', path: path, pageIndex: currentPageIndex });
         }
 
         function sendClearData() {
-            if (conn && conn.open) conn.send({ type: 'clear', pageIndex: currentPageIndex });
+            sendData({ type: 'clear', pageIndex: currentPageIndex });
         }
 
         function sendUndoData() {
-            if (conn && conn.open) conn.send({ type: 'undo', pageIndex: currentPageIndex });
+            sendData({ type: 'undo', pageIndex: currentPageIndex });
         }
 
         function sendEraseData(path) {
-            if (conn && conn.open) conn.send({ type: 'erase', path: path, pageIndex: currentPageIndex });
+            sendData({ type: 'erase', path: path, pageIndex: currentPageIndex });
         }
 
         function sendFileWithPages(pagesArray, name, type) {
@@ -1356,7 +1380,6 @@
             const pageData = fileState.pages[idx];
             const img = new Image();
             
-            // Hiển thị loading cho Android khi chuyển trang
             if (isMobile) {
                 showLoading('📄 Đang tải trang ' + (idx + 1) + '/' + fileState.pages.length, 'Vui lòng đợi...');
             }
@@ -1392,7 +1415,7 @@
             showLoading('🖼️ Đang tải ảnh...', 'Vui lòng đợi');
             const img = new Image();
             img.onload = function() {
-                const maxDim = isAndroid ? 2000 : 4000; // Giảm chất lượng trên Android
+                const maxDim = isAndroid ? 2000 : 4000;
                 let w = img.naturalWidth, h = img.naturalHeight;
                 if (w > maxDim || h > maxDim) {
                     const ratio = Math.min(maxDim / w, maxDim / h);
@@ -1423,11 +1446,12 @@
                 const arrayBuffer = e.target.result;
                 saveOriginalPdfToStorage(arrayBuffer, file.name);
                 
-                updateLoadingText('📄 Đang xử lý PDF...', 'Vui lòng đợi, không tắt trình duyệt');
+                updateLoadingText('📄 Đang xử lý PDF...', 'Vui lòng đợi');
                 
                 pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
                     const totalPages = pdf.numPages;
-                    const scale = isAndroid ? 1.5 : 3.0; // Giảm chất lượng trên Android để tránh treo
+                    // Android giảm chất lượng để tránh treo
+                    const scale = isAndroid ? 1.2 : 3.0;
                     const pagePromises = [];
                     
                     for (let i = 1; i <= totalPages; i++) {
@@ -1571,7 +1595,6 @@
                     }
                     doc.addImage(dataURL, 'PNG', 0, 0, pc.width, pc.height);
                     
-                    // Giải phóng bộ nhớ
                     pc.width = 0;
                     pc.height = 0;
                 }
@@ -1610,7 +1633,6 @@
 
         pdfInput.addEventListener('change', function(e) {
             if (this.files && this.files[0]) {
-                // Kiểm tra dung lượng file
                 const fileSize = this.files[0].size;
                 if (fileSize > 20 * 1024 * 1024 && isAndroid) {
                     if (!confirm('File PDF có dung lượng lớn (' + (fileSize/1024/1024).toFixed(1) + 'MB).\nTrên Android có thể bị treo. Bạn có muốn tiếp tục không?')) {
@@ -1690,7 +1712,7 @@
             holder.appendChild(content);
             document.body.appendChild(holder);
 
-            const scale = isAndroid ? 1.5 : 2.5;
+            const scale = isAndroid ? 1.0 : 2.5;
             
             setTimeout(function() {
                 html2canvas(holder, { 
@@ -2105,16 +2127,14 @@
             }
         });
 
-        // Hiển thị thông báo cho Android
         if (isAndroid) {
             console.log('📱 Đang chạy trên Android - Đã tối ưu hiệu năng');
             console.log('💡 Nếu bị treo, thử dùng file nhỏ hơn hoặc dùng Chrome');
+            console.log('⚡ Giảm chất lượng hiển thị để chạy mượt hơn');
         }
 
         console.log('🖌️ Bảng vẽ từ xa đã sẵn sàng!');
-        console.log('📄 Vẽ trực tiếp trên PDF gốc - chất lượng cao');
-        console.log('📄 Chuyển trang nhanh bằng nút ◀ ▶ trong hòm công cụ');
-        console.log('💾 Lưu PDF bao gồm TẤT CẢ các trang với nét vẽ');
+        console.log('📄 Vẽ trực tiếp trên PDF gốc');
         console.log('📱 ' + (isAndroid ? 'Đã tối ưu cho Android' : 'Đang chạy trên PC'));
     })();
 </script>
